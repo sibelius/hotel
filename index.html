@@ -1,0 +1,1075 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hotel Mariah 3D</title>
+<style>
+  :root { --bg:#1d1b2f; --panel:#2b2845; --gold:#f4c95d; --txt:#fff; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:radial-gradient(circle at top,#3a3560,#15131f); color:var(--txt);
+    font-family: "Trebuchet MS", system-ui, sans-serif; overflow:hidden; user-select:none; }
+  #hud { position:absolute; top:0; left:0; right:0; display:flex; gap:8px; align-items:center; padding:8px 12px; flex-wrap:wrap; z-index:5; pointer-events:none; }
+  #hud > * { pointer-events:auto; }
+  .pill { background:#2b2845e6; border:2px solid #4a4570; border-radius:999px; padding:6px 12px; display:flex; gap:6px; align-items:center; font-size:15px; }
+  .pill b { color:var(--gold); }
+  .pill button, .btn { background:var(--gold); color:#3a2a00; border:0; border-radius:999px; font-weight:bold; cursor:pointer; font-family:inherit; }
+  .pill button { padding:2px 8px; font-size:12px; }
+  .btn { padding:8px 14px; font-size:15px; box-shadow:0 3px 0 #b58a1f; }
+  .btn:active { transform:translateY(2px); box-shadow:0 1px 0 #b58a1f; }
+  .btn.on { background:#69db7c; box-shadow:0 3px 0 #2f9e44; }
+  .xpbar { width:90px; height:8px; background:#15131f; border-radius:9px; overflow:hidden; }
+  .xpbar i { display:block; height:100%; width:0; background:linear-gradient(90deg,#69db7c,#38d9a9); }
+  .spacer { flex:1; }
+  #title { font-weight:bold; font-size:18px; color:var(--gold); margin-right:6px; text-shadow:0 2px 4px #000; }
+  #wrap { position:absolute; inset:0; }
+  #wrap canvas { display:block; cursor:pointer; }
+  #tip { position:absolute; bottom:8px; left:0; right:0; text-align:center; font-size:13px; opacity:.85; text-shadow:0 1px 3px #000; pointer-events:none; }
+  #toast { position:fixed; top:70px; left:50%; transform:translateX(-50%); background:#000c; padding:10px 18px; border-radius:12px;
+    font-size:16px; pointer-events:none; opacity:0; transition:opacity .25s; z-index:20; max-width:90vw; text-align:center; }
+  #pauseOv { position:fixed; inset:0; background:#0008; display:none; align-items:center; justify-content:center; font-size:48px; font-weight:bold; z-index:4; pointer-events:none; }
+  #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; font-size:22px; z-index:40; background:#15131f; }
+  #modal { position:fixed; inset:0; background:#0009; display:flex; align-items:center; justify-content:center; z-index:30; }
+  #modal.hidden { display:none; }
+  .box { background:var(--panel); border:3px solid var(--gold); border-radius:18px; padding:18px; width:min(720px,94vw); max-height:88vh; overflow:auto; }
+  .box h2 { margin:0 0 10px; color:var(--gold); }
+  .tabs { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+  .tabs button { background:#3d3960; color:#fff; border:0; padding:8px 12px; border-radius:10px; cursor:pointer; font-family:inherit; font-size:14px; }
+  .tabs button.on { background:var(--gold); color:#3a2a00; font-weight:bold; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; }
+  .card { background:#3d3960; border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:6px; }
+  .card .big { font-size:34px; text-align:center; }
+  .card .n { font-weight:bold; }
+  .card .d { font-size:12px; opacity:.8; }
+  .card button { background:var(--gold); border:0; border-radius:8px; padding:7px; font-weight:bold; cursor:pointer; font-family:inherit; }
+  .card button:disabled { background:#6c6890; color:#bbb; cursor:not-allowed; }
+  .card.eq { outline:3px solid #69db7c; }
+  .lvlbar { display:flex; gap:3px; } .lvlbar i { flex:1; height:6px; border-radius:3px; background:#15131f; } .lvlbar i.f { background:#69db7c; }
+  .close { float:right; background:#e03131; color:#fff; border:0; border-radius:8px; padding:6px 10px; cursor:pointer; font-weight:bold; }
+  .demo { background:#15131f; border-radius:10px; padding:8px 10px; font-size:12px; opacity:.85; margin-bottom:10px; }
+  .help p, .help li { line-height:1.5; }
+  .swatch { width:40px; height:40px; border-radius:50%; margin:0 auto; border:3px solid #fff; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="wrap"></div>
+<div id="hud">
+  <span id="title">🏨 Hotel Mariah 3D</span>
+  <div class="pill">🪙 <b id="coins">0</b></div>
+  <div class="pill">💎 <b id="gems">0</b> <button id="addGems">+</button></div>
+  <div class="pill">Nível <b id="lvl">1</b><div class="xpbar"><i id="xp"></i></div></div>
+  <div class="pill">⭐ <b id="rep">3.0</b></div>
+  <div class="pill">🫴 <span id="carry">mãos livres</span> <button id="drop">largar</button></div>
+  <div class="pill" id="boost" style="display:none">⚡ 2x <b id="boostT"></b></div>
+  <div class="spacer"></div>
+  <button class="btn" id="camBtn" title="Câmera segue você">🎥 Seguir</button>
+  <button class="btn" id="viewBtn" title="Ver o hotel inteiro">🗺️</button>
+  <button class="btn" id="shopBtn">🛒 Loja</button>
+  <button class="btn" id="helpBtn">❓</button>
+  <button class="btn" id="pauseBtn">⏸️</button>
+</div>
+<div id="tip">Clique para andar • Arraste para girar a câmera • Scroll/pinça = zoom • Botão direito = mover a câmera</div>
+<div id="toast"></div>
+<div id="pauseOv">⏸️ PAUSADO</div>
+<div id="loading">🏨 Carregando o hotel 3D...</div>
+<div id="modal" class="hidden"><div class="box" id="box"></div></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ================== CONFIG (coordenadas do jogo: x = leste, y = sul) ==================
+const W = 1100, H = 720;
+const $ = id => document.getElementById(id);
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+const ITEMS = {
+  toalha: { e: '🧺', n: 'Toalhas', lvl: 1, st: 'Lavanderia' },
+  comida: { e: '🍔', n: 'Comida', lvl: 1, st: 'Cozinha' },
+  bebida: { e: '🍹', n: 'Bebida', lvl: 3, st: 'Bar' },
+  cafe:   { e: '☕', n: 'Café',   lvl: 5, st: 'Cafeteria' },
+};
+const STATIONS = [
+  { item: 'toalha', name: 'Lavanderia', x: 390, y: 482, w: 80, h: 46, color: '#a5d8ff' },
+  { item: 'comida', name: 'Cozinha',    x: 485, y: 482, w: 80, h: 46, color: '#ffc9c9' },
+  { item: 'bebida', name: 'Bar',        x: 580, y: 482, w: 80, h: 46, color: '#d0bfff' },
+  { item: 'cafe',   name: 'Cafeteria',  x: 675, y: 482, w: 80, h: 46, color: '#e6c9a8' },
+];
+STATIONS.forEach(s => { s.px = s.x + s.w / 2; s.py = s.y + s.h + 20; });
+
+const DESK = { x: 200, y: 530, w: 150, h: 32 };
+const STAFF_SPOT = { x: 275, y: 507 };
+const QSLOTS = [[275, 600], [275, 638], [238, 668], [200, 695], [160, 700]].map(([x, y]) => ({ x, y }));
+const CHECKOUT_PT = { x: 335, y: 600 };
+const EXIT = { x: 90, y: 712 };
+const C0 = { x: 90, y: 240 }, B0 = { x: 90, y: 520 };
+const STAFF_ROOM = { x: 370, y: 630, w: 190, h: 84 };
+const RESTAURANT = { x: 580, y: 590, w: 235, h: 124 };
+const POOL = { x: 840, y: 492, w: 245, h: 145 };
+const TABLES = [[630, 625], [700, 625], [770, 625], [630, 685], [700, 685], [770, 685]];
+const FOOD_SPOTS = TABLES.map(([x, y]) => ({ x: x - 22, y, taken: false }));
+const POOL_SPOTS = [[885, 540], [960, 590], [1035, 535], [1000, 610], [870, 676], [920, 676], [970, 676], [1020, 676], [1068, 676]]
+  .map(([x, y], i) => ({ x, y, taken: false, water: i < 4 }));
+const ROOM_UNLOCK = [1, 1, 2, 3, 4, 5, 6, 8, 10, 12];
+
+const REQ_BY = {
+  sleep: ['toalha', 'comida', 'cafe'], bath: ['toalha'], pool: ['bebida', 'toalha'],
+  food: ['comida', 'bebida', 'cafe'], room: ['comida', 'cafe', 'toalha', 'bebida'],
+};
+const ACT_ICON = { sleep: '💤', bath: '🚿', pool: '🏊', food: '🍽️', room: '📺' };
+const ACT_TXT = { sleep: 'dormindo', bath: 'no banheiro', pool: 'curtindo a piscina', food: 'no restaurante', room: 'vendo TV no quarto' };
+
+const UPGRADES = [
+  { k: 'speed', e: '👟', n: 'Tênis Turbo', d: 'Você anda mais rápido', max: 5, cost: l => 60 + l * 60 },
+  { k: 'cap', e: '🍽️', n: 'Bandeja Extra', d: 'Carregue +1 item por vez', max: 2, cost: l => 200 + l * 300 },
+  { k: 'tips', e: '😁', n: 'Sorriso Nota 10', d: '+20% de gorjeta por nível', max: 5, cost: l => 80 + l * 70 },
+  { k: 'decor', e: '🪴', n: 'Decoração Chique', d: 'Hóspedes ficam mais pacientes', max: 5, cost: l => 90 + l * 80 },
+  { k: 'price', e: '🛎️', n: 'Quartos Luxo', d: '+15% no valor das diárias', max: 5, cost: l => 120 + l * 120 },
+  { k: 'cleaners', e: '🧹', n: 'Contratar Faxineiro', d: '+1 funcionário da limpeza', max: 4, cost: l => 150 + l * 150 },
+  { k: 'clean', e: '🧴', n: 'Produtos de Limpeza', d: 'Equipe limpa mais rápido', max: 5, cost: l => 80 + l * 80 },
+];
+const HATS = [
+  { e: '🧢', n: 'Boné', c: 0 }, { e: '', n: 'Sem chapéu', c: 0 }, { e: '🎩', n: 'Cartola', c: 200 },
+  { e: '👒', n: 'Chapéu de Sol', c: 300 }, { e: '🎓', n: 'Formatura', c: 400 }, { e: '🎀', n: 'Laço', c: 250 },
+  { e: '🤠', n: 'Cowboy', g: 10 }, { e: '👑', n: 'Coroa', g: 25 },
+];
+const COLORS = [
+  { c: '#2f6fed', n: 'Azul', cost: 0 }, { c: '#e03131', n: 'Vermelho', cost: 100 }, { c: '#2b8a3e', n: 'Verde', cost: 100 },
+  { c: '#d6336c', n: 'Rosa', cost: 150 }, { c: '#212529', n: 'Preto', cost: 200 }, { c: '#f59f00', n: 'Dourado', g: 20 },
+];
+const GEM_SHOP = [
+  { e: '⚡', n: 'Boost 2x moedas', d: '3 minutos de moedas em dobro', g: 5, act: () => { S.boostT += 180; } },
+  { e: '💰', n: 'Saco de moedas', d: '+300 moedas', g: 8, act: () => { S.coins += 300; } },
+  { e: '🌟', n: 'Fama instantânea', d: '+1 estrela de reputação', g: 6, act: () => { S.rep = clamp(S.rep + 1, 1, 5); } },
+];
+const PACKS = [
+  { g: 20, p: 'R$ 4,90', e: '💎' }, { g: 60, p: 'R$ 12,90', e: '💎💎', tag: 'Popular' },
+  { g: 150, p: 'R$ 29,90', e: '💎💎💎', tag: 'Melhor valor' },
+];
+
+// ================== STATE ==================
+const DEFAULT = {
+  coins: 60, gems: 5, xp: 0, level: 1, rep: 3, served: 0, boostT: 0,
+  up: { speed: 0, cap: 0, tips: 0, decor: 0, price: 0, cleaners: 0, clean: 0 },
+  hats: ['🧢', ''], colors: ['#2f6fed'], hat: '🧢', color: '#2f6fed', seenHelp: false,
+};
+let S = load();
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem('hotelMariah_v1'));
+    if (d) return { ...DEFAULT, ...d, up: { ...DEFAULT.up, ...d.up } };
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(DEFAULT));
+}
+function save() { try { localStorage.setItem('hotelMariah_v1', JSON.stringify(S)); } catch (e) {} }
+
+const rooms = [];
+for (let i = 0; i < 10; i++) {
+  const row = i < 5 ? 0 : 1, col = i % 5, w = 184, x = 180 + col * w, y = row ? 280 : 10, h = row ? 180 : 190;
+  const r = { i, row, x, y, w, h, dx: x + w / 2, cy: y + h / 2, num: 101 + i, price: 30 + i * 6, state: 'clean', guest: null, cleaner: null, progress: 0 };
+  if (!row) { r.bedR = { x: x + 18, y: y + 20, w: 58, h: 82 }; r.bathR = { x: x + w - 76, y: y + 6, w: 70, h: 72 }; }
+  else { r.bedR = { x: x + 18, y: y + h - 102, w: 58, h: 82 }; r.bathR = { x: x + w - 76, y: y + h - 78, w: 70, h: 72 }; }
+  r.bed = { x: r.bedR.x + 29, y: r.bedR.y + 44 };
+  r.bath = { x: r.bathR.x + 35, y: r.bathR.y + 36 };
+  r.center = { x: r.dx, y: row ? r.cy - 10 : r.cy + 10 };
+  rooms.push(r);
+}
+const isUnlocked = r => S.level >= ROOM_UNLOCK[r.i];
+
+let guests = [], cleaners = [], floats = [], marker = null;
+const player = { x: 275, y: 507, path: [], cb: null, spd: 170, carry: [], ang: Math.PI, moving: false };
+let spawnT = 2, qCounter = 0, paused = false, saveT = 0;
+
+// ================== ROUTING ==================
+function zoneOf(p) {
+  if (p.y >= 470) return { t: 'bottom' };
+  if (p.x < 180) return { t: 'hall' };
+  if (p.y >= 200 && p.y < 280) return { t: 'corr' };
+  const col = clamp(Math.floor((p.x - 180) / 184), 0, 4);
+  return { t: 'room', i: (p.y < 200 ? 0 : 5) + col };
+}
+function hubPath(p) {
+  const z = zoneOf(p);
+  if (z.t === 'room') { const r = rooms[z.i]; return [{ x: r.dx, y: r.cy }, { x: r.dx, y: 240 }, C0]; }
+  if (z.t === 'corr') return [{ x: p.x, y: 240 }, C0];
+  if (z.t === 'hall') return [{ x: 90, y: p.y }, C0];
+  return [B0, C0];
+}
+function route(a, b) {
+  const za = zoneOf(a), zb = zoneOf(b);
+  if (za.t === 'bottom' && zb.t === 'bottom') return [b];
+  if (za.t === 'hall' && zb.t === 'hall') return [b];
+  if (za.t === 'room' && zb.t === 'room' && za.i === zb.i) return [b];
+  const isC = z => z.t === 'room' || z.t === 'corr';
+  if (isC(za) && isC(zb)) return [...hubPath(a).slice(0, -1), ...hubPath(b).slice(0, -1).reverse(), b];
+  return [...hubPath(a), ...hubPath(b).reverse().slice(1), b];
+}
+function goTo(e, t, cb) { e.path = route({ x: e.x, y: e.y }, { x: t.x, y: t.y }); e.cb = cb || null; }
+function move(e, dt) {
+  let d = e.spd * dt; e.moving = false;
+  while (d > 0 && e.path.length) {
+    const p = e.path[0], dx = p.x - e.x, dy = p.y - e.y, dist = Math.hypot(dx, dy);
+    if (dist <= d) { e.x = p.x; e.y = p.y; e.path.shift(); d -= dist; }
+    else { e.x += dx / dist * d; e.y += dy / dist * d; e.ang = Math.atan2(dx, dy); d = 0; e.moving = true; }
+  }
+  if (!e.path.length && e.cb) { const f = e.cb; e.cb = null; f(); }
+}
+
+// ================== HELPERS ==================
+let toastT;
+function toast(m) { const t = $('toast'); t.textContent = m; t.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(() => t.style.opacity = 0, 2400); }
+const need = L => 50 + L * 35;
+const boostMul = () => S.boostT > 0 ? 2 : 1;
+function earn(n, x, y) { n = Math.round(n * boostMul()); S.coins += n; float(x, y, `+${n} 🪙`, '#ffd43b'); }
+function addXP(n) {
+  S.xp += n;
+  const msgs = [];
+  while (S.xp >= need(S.level)) {
+    S.xp -= need(S.level); S.level++; S.gems += 3;
+    rooms.forEach(r => { if (ROOM_UNLOCK[r.i] === S.level) msgs.push(`🔓 Quarto ${r.num} desbloqueado!`); });
+    Object.values(ITEMS).forEach(it => { if (it.lvl === S.level) msgs.push(`🔓 ${it.st} liberada: ${it.e} ${it.n}`); });
+    msgs.push('💎 +3 gemas de presente');
+  }
+  if (msgs.length) levelUp(msgs);
+}
+function queueList() { return guests.filter(g => g.inQueue).sort((a, b) => a.qOrder - b.qOrder); }
+
+// ================== GUESTS ==================
+const SKINS = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac'];
+const GCOLORS = ['#ff922b', '#20c997', '#845ef7', '#f06595', '#fab005', '#15aabf', '#94d82d', '#ff6b6b'];
+function spawnGuest() {
+  guests.push({
+    x: EXIT.x, y: EXIT.y + 10, path: [], cb: null, spd: 75, ang: Math.PI, color: pick(GCOLORS), skin: pick(SKINS),
+    hair: pick(['#2b1d0e', '#6b3e1e', '#e8c07d', '#111', '#b0413e', '#ddd']),
+    state: 'queue', inQueue: true, qOrder: qCounter++, slot: -1,
+    pat: 45 * (1 + 0.15 * S.up.decor), patMax: 45 * (1 + 0.15 * S.up.decor),
+    room: null, acts: 3 + Math.floor(Math.random() * 3), req: null, reqs: 0, sat: 1, act: null, timer: 0, spot: null, bag: true,
+  });
+}
+function doCheckin() {
+  const q = queueList();
+  if (!q.length) { toast('Nenhum hóspede esperando na recepção.'); return; }
+  const r = rooms.find(r => isUnlocked(r) && r.state === 'clean' && !r.guest);
+  if (!r) { toast('😬 Nenhum quarto limpo! Espere a equipe de limpeza 🧹'); return; }
+  const g = q[0];
+  g.inQueue = false; g.room = r; g.price = r.price * (1 + 0.15 * S.up.price); r.guest = g; r.state = 'occupied';
+  g.state = 'walk'; g.sat = 0.8 + 0.4 * (g.pat / g.patMax);
+  addXP(5); float(g.x, g.y, `🔑 Quarto ${r.num}`, '#8ce99a');
+  goTo(g, r.center, () => { g.bag = false; nextActivity(g); });
+}
+function startAct(g, a, t) { g.state = 'act'; g.act = a; g.timer = t; }
+function nextActivity(g) {
+  if (g.spot) { g.spot.taken = false; g.spot = null; }
+  const r = g.room;
+  g.act = null; g.state = 'walk';
+  if (g.acts <= 0) {
+    r.state = 'dirty'; r.guest = null; g.room = null; g.bag = true;
+    goTo(g, r.center, () => goTo(g, CHECKOUT_PT, () => {
+      const pay = g.price * (0.5 + 0.5 * clamp(g.sat, 0, 1.5));
+      earn(pay, g.x, g.y); addXP(15);
+      S.rep = clamp(S.rep + (g.sat - 0.9) * 0.2, 1, 5);
+      float(g.x + 10, g.y - 20, g.sat >= 1 ? '😍 Voltarei!' : g.sat >= 0.7 ? '🙂 Tchau!' : '😒 Hmpf', '#fff');
+      g.state = 'leave'; goTo(g, EXIT, () => { g.dead = true; });
+    }));
+    return;
+  }
+  g.acts--;
+  const a = pick(['sleep', 'sleep', 'bath', 'pool', 'food', 'room']);
+  if (a === 'sleep') goTo(g, r.bed, () => startAct(g, 'sleep', rand(8, 12)));
+  else if (a === 'bath') goTo(g, r.bath, () => startAct(g, 'bath', rand(4, 6)));
+  else if (a === 'room') goTo(g, r.center, () => startAct(g, 'room', rand(6, 9)));
+  else {
+    const free = (a === 'pool' ? POOL_SPOTS : FOOD_SPOTS).filter(s => !s.taken);
+    if (!free.length) { goTo(g, r.center, () => startAct(g, 'room', 6)); return; }
+    const s = pick(free); s.taken = true; g.spot = s;
+    goTo(g, s, () => startAct(g, a, rand(9, 13)));
+  }
+}
+function updateGuest(g, dt) {
+  move(g, dt);
+  if (g.state === 'queue') {
+    g.pat -= dt;
+    if (g.pat <= 0) {
+      g.inQueue = false; g.state = 'leave'; S.rep = clamp(S.rep - 0.15, 1, 5);
+      float(g.x, g.y, '😡 Demorou demais!', '#ff8787');
+      goTo(g, EXIT, () => { g.dead = true; });
+    }
+  } else if (g.state === 'act' && !g.path.length) {
+    if (g.req) {
+      g.req.t -= dt;
+      if (g.req.t <= 0) {
+        g.req = null; g.sat -= 0.3; S.rep = clamp(S.rep - 0.08, 1, 5);
+        float(g.x, g.y, '😠 Ninguém me atendeu!', '#ff8787');
+      }
+    } else {
+      g.timer -= dt;
+      if (g.reqs < 2 && Math.random() < dt * 0.085) {
+        const types = REQ_BY[g.act].filter(t => S.level >= ITEMS[t].lvl);
+        if (types.length) { const max = 28 * (1 + 0.15 * S.up.decor); g.req = { type: pick(types), t: max, max }; g.reqs++; }
+      }
+      if (g.timer <= 0) nextActivity(g);
+    }
+  }
+}
+function deliver(g) {
+  if (!g.req) { toast('Esse hóspede não precisa de nada agora.'); return; }
+  const idx = player.carry.indexOf(g.req.type);
+  const it = ITEMS[g.req.type];
+  if (idx < 0) { toast(`O hóspede quer ${it.e} ${it.n}. Pegue na ${it.st}!`); return; }
+  player.carry.splice(idx, 1);
+  const frac = g.req.t / g.req.max;
+  const tip = (6 + frac * 10) * (1 + 0.2 * S.up.tips) * (0.6 + S.rep * 0.15);
+  earn(tip, g.x, g.y); addXP(12); S.served++;
+  g.sat = Math.min(1.5, g.sat + 0.2); S.rep = clamp(S.rep + 0.03, 1, 5);
+  float(g.x + 10, g.y - 20, pick(['😊 Obrigado!', '🥰 Perfeito!', '👍 Valeu!', '😄 Que rápido!']), '#8ce99a');
+  g.req = null;
+}
+
+// ================== CLEANERS ==================
+function syncCleaners() {
+  while (cleaners.length < 1 + S.up.cleaners) {
+    const i = cleaners.length;
+    cleaners.push({ i, home: { x: 395 + i * 38, y: 685 }, x: 395 + i * 38, y: 685, path: [], cb: null, spd: 90, ang: Math.PI, state: 'idle', room: null, timer: 0 });
+  }
+}
+function updateCleaner(c, dt) {
+  c.spd = 90 * (1 + 0.12 * S.up.clean);
+  move(c, dt);
+  if (c.state === 'idle') {
+    const r = rooms.find(r => r.state === 'dirty' && !r.cleaner);
+    if (r) {
+      r.cleaner = c; c.room = r; c.state = 'walk';
+      goTo(c, r.bed, () => { c.state = 'cleaning'; c.timer = c.tMax = 10 / (1 + 0.3 * S.up.clean); r.state = 'cleaning'; });
+    }
+  } else if (c.state === 'cleaning') {
+    const r = c.room;
+    c.timer -= dt; r.progress = 1 - c.timer / c.tMax;
+    const phase = Math.floor(r.progress * 3);
+    const target = phase === 0 ? r.bed : phase === 1 ? r.bath : r.center;
+    if (!c.path.length && Math.hypot(c.x - target.x, c.y - target.y) > 2) goTo(c, target);
+    if (c.timer <= 0) {
+      r.state = 'clean'; r.cleaner = null; r.progress = 0; c.room = null; c.state = 'walk';
+      float(r.dx, r.cy, '✨ Limpinho!', '#a5d8ff');
+      goTo(c, c.home, () => { c.state = 'idle'; });
+    }
+  }
+}
+
+// ================== UPDATE ==================
+function update(dt) {
+  if (S.boostT > 0) S.boostT = Math.max(0, S.boostT - dt);
+  syncCleaners();
+  spawnT -= dt;
+  if (spawnT <= 0) {
+    spawnT = rand(7, 12) * (1.35 - S.rep * 0.09);
+    const unlocked = rooms.filter(isUnlocked).length;
+    const active = guests.filter(g => g.state !== 'leave').length;
+    if (queueList().length < 5 && active < unlocked + 2) spawnGuest();
+  }
+  queueList().forEach((g, i) => { if (g.slot !== i) { g.slot = i; goTo(g, QSLOTS[i]); } });
+  guests.forEach(g => updateGuest(g, dt));
+  guests.filter(g => g.dead).forEach(removeGuestMesh);
+  guests = guests.filter(g => !g.dead);
+  cleaners.forEach(c => updateCleaner(c, dt));
+  player.spd = 170 * (1 + 0.15 * S.up.speed);
+  move(player, dt);
+  saveT += dt; if (saveT > 3) { saveT = 0; save(); }
+}
+
+// =====================================================================
+// ============================ 3D ====================================
+// =====================================================================
+const wrap = $('wrap');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+wrap.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#1d1b2f');
+scene.fog = new THREE.Fog('#1d1b2f', 1600, 2600);
+const camera = new THREE.PerspectiveCamera(42, 1, 5, 4000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = 1.28;
+controls.minDistance = 180;
+controls.maxDistance = 1500;
+const OVERVIEW = { pos: new THREE.Vector3(0, 900, 640), target: new THREE.Vector3(0, 0, 10) };
+camera.position.copy(OVERVIEW.pos); controls.target.copy(OVERVIEW.target);
+
+// root: tudo em coordenadas do jogo (x, altura, y)
+const root = new THREE.Group();
+root.position.set(-W / 2, 0, -H / 2);
+scene.add(root);
+
+scene.add(new THREE.HemisphereLight('#fff6e8', '#5a4a6a', 1.0));
+const sun = new THREE.DirectionalLight('#ffffff', 1.6);
+sun.position.set(-250, 700, 400);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -700, right: 700, top: 500, bottom: -500, near: 10, far: 2000 });
+sun.shadow.bias = -0.0008;
+scene.add(sun);
+
+// --------- materiais & helpers ---------
+const matCache = new Map();
+function mat(color, opts = {}) {
+  const key = color + JSON.stringify(opts);
+  if (!matCache.has(key)) matCache.set(key, new THREE.MeshStandardMaterial({ color, roughness: 0.75, ...opts }));
+  return matCache.get(key);
+}
+function box(x, y, z, w, h, d, material, parent = root, shadow = true) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), typeof material === 'string' ? mat(material) : material);
+  m.position.set(x, y, z); m.castShadow = shadow; m.receiveShadow = true; parent.add(m); return m;
+}
+function cyl(x, y, z, r, h, material, parent = root, seg = 20) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, seg), typeof material === 'string' ? mat(material) : material);
+  m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
+}
+function sphere(x, y, z, r, material, parent = root) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), typeof material === 'string' ? mat(material) : material);
+  m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m;
+}
+function floor(x, y, w, h, material, lift = 0.5) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), typeof material === 'string' ? mat(material) : material);
+  m.rotation.x = -Math.PI / 2; m.position.set(x + w / 2, lift, y + h / 2); m.receiveShadow = true; root.add(m); return m;
+}
+
+const texCache = new Map();
+function canvasTex(key, w, h, fn) {
+  if (texCache.has(key)) return texCache.get(key);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  fn(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  texCache.set(key, t); return t;
+}
+const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+function emojiTex(e) {
+  return canvasTex('e:' + e, 128, 128, g => { g.font = `100px ${EMOJI_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(e, 64, 72); });
+}
+function emojiSprite(e, size, parent = root, x = 0, y = 0, z = 0, top = false) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTex(e), transparent: true, depthWrite: false, depthTest: !top }));
+  s.scale.set(size, size, 1); s.position.set(x, y, z); if (top) s.renderOrder = 10; parent.add(s); return s;
+}
+function rrPath(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+function textInfo(text, color, bg) {
+  const key = `t:${text}|${color}|${bg}`;
+  if (texCache.has(key)) return texCache.get(key + ':a');
+  const probe = document.createElement('canvas').getContext('2d');
+  const font = `bold 44px "Trebuchet MS",${EMOJI_FONT}`;
+  probe.font = font;
+  const w = Math.ceil(probe.measureText(text).width) + 36, h = 64;
+  const tex = canvasTex(key, w, h, g => {
+    if (bg) { g.fillStyle = bg; rrPath(g, 0, 0, w, h, 20); g.fill(); }
+    g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle';
+    if (!bg) { g.lineWidth = 8; g.strokeStyle = '#000'; g.strokeText(text, w / 2, h / 2 + 2); }
+    g.fillStyle = color; g.fillText(text, w / 2, h / 2 + 2);
+  });
+  const info = { tex, aspect: w / h };
+  texCache.set(key + ':a', info); return info;
+}
+function textSprite(text, { color = '#fff', bg = 'rgba(0,0,0,.55)', h = 14, top = false } = {}, parent = root, x = 0, y = 0, z = 0) {
+  const info = textInfo(text, color, bg);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: info.tex, transparent: true, depthWrite: false, depthTest: !top }));
+  s.scale.set(h * info.aspect, h, 1); s.position.set(x, y, z); if (top) s.renderOrder = 11; parent.add(s); return s;
+}
+function plant(x, z, s = 1) {
+  cyl(x, 7 * s, z, 7 * s, 14 * s, '#c0703c');
+  sphere(x, 22 * s, z, 11 * s, '#40a060');
+  sphere(x + 5 * s, 28 * s, z - 3 * s, 7 * s, '#51b86e');
+}
+
+// --------- chão ---------
+floor(-600, -600, W + 1200, H + 1200, '#2a2540', -0.5);
+const checker = canvasTex('checker', 72, 72, g => { g.fillStyle = '#f3ead8'; g.fillRect(0, 0, 72, 72); g.fillStyle = '#e4d6bb'; g.fillRect(0, 0, 36, 36); g.fillRect(36, 36, 36, 36); });
+checker.wrapS = checker.wrapT = THREE.RepeatWrapping; checker.repeat.set(W / 72, 250 / 72);
+floor(0, 470, W, 250, new THREE.MeshStandardMaterial({ map: checker, roughness: 0.4 }));
+floor(0, 0, 180, 470, '#e8dcc4');
+floor(66, 10, 48, 460, '#b23a48', 0.8);
+floor(66, 200, W - 66, 80, '#b23a48', 0.8);
+floor(180, 208, W - 188, 64, '#c2485a', 0.9);
+const tiles = canvasTex('tiles', 64, 64, g => { g.fillStyle = '#e3fafc'; g.fillRect(0, 0, 64, 64); g.strokeStyle = '#99e9f2'; g.lineWidth = 3; g.strokeRect(0, 0, 32, 32); g.strokeRect(32, 32, 32, 32); g.strokeRect(32, 0, 32, 32); g.strokeRect(0, 32, 32, 32); });
+tiles.wrapS = tiles.wrapT = THREE.RepeatWrapping; tiles.repeat.set(2, 2);
+const tileMat = new THREE.MeshStandardMaterial({ map: tiles, roughness: 0.3 });
+
+// --------- paredes ---------
+const WALL_H = 34, T = 8;
+const wallMat = mat('#f1e3c8'), outerMat = mat('#8d6e63');
+function hWall(xa, xb, y, m = wallMat, h = WALL_H) { box((xa + xb) / 2, h / 2, y, xb - xa, h, T, m); }
+function vWall(x, ya, yb, m = wallMat, h = WALL_H) { box(x, h / 2, (ya + yb) / 2, T, h, yb - ya, m); }
+hWall(0, W, 2, outerMat, 44); vWall(2, 0, H, outerMat, 44); vWall(W - 2, 0, H, outerMat, 44);
+hWall(0, 55, H - 2, outerMat, 20); hWall(125, W, H - 2, outerMat, 20);
+for (let c = 0; c < 5; c++) { const x = 180 + c * 184; vWall(x, 0, 200); vWall(x, 280, 470); }
+[200, 280].forEach(y => {
+  let xa = 180;
+  for (let c = 0; c < 5; c++) { const dx = 180 + c * 184 + 92; hWall(xa, dx - 22, y); xa = dx + 22; }
+  hWall(xa, W, y);
+});
+hWall(0, 20, 470); hWall(160, W, 470);
+
+// --------- hall ---------
+box(40, 30, 30, 50, 60, 24, '#adb5bd'); box(40, 30, 43, 40, 50, 2, '#dee2e6', root, false);
+emojiSprite('🛗', 22, root, 40, 72, 30);
+plant(150, 30); plant(28, 445); plant(152, 445); plant(28, 160);
+box(152, 30, 150, 6, 30, 40, '#f4c95d'); emojiSprite('🖼️', 26, root, 150, 34, 150);
+textSprite('CORREDOR', { h: 12 }, root, 90, 30, 330);
+emojiSprite('🚪', 26, root, 90, 18, 712);
+textSprite('ENTRADA', { h: 13, bg: '#8d6e63' }, root, 90, 40, 712);
+box(90, 1, 700, 70, 2, 22, '#8d6e63', root, false);
+
+// --------- quartos ---------
+const FLOORS = ['#f7e1d7', '#dde5b6', '#cfe1f2', '#f2d7ee', '#e3f2d0'];
+function roomLabelTex(r) {
+  const key = `room:${r.num}:${r.state}:${Math.round(r.progress * 20)}:${isUnlocked(r)}`;
+  return canvasTex(key, 200, 96, g => {
+    g.fillStyle = '#3b2b20'; rrPath(g, 4, 4, 192, 60, 16); g.fill();
+    g.strokeStyle = '#f4c95d'; g.lineWidth = 4; g.stroke();
+    g.fillStyle = { clean: '#51cf66', occupied: '#4dabf7', dirty: '#a0522d', cleaning: '#fcc419' }[r.state];
+    if (!isUnlocked(r)) g.fillStyle = '#868e96';
+    g.beginPath(); g.arc(40, 34, 14, 0, 7); g.fill();
+    g.font = 'bold 40px "Trebuchet MS",sans-serif'; g.fillStyle = '#f4c95d'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(String(r.num), 118, 36);
+    if (r.state === 'cleaning') {
+      g.fillStyle = '#0008'; rrPath(g, 10, 72, 180, 16, 8); g.fill();
+      g.fillStyle = '#fcc419'; rrPath(g, 10, 72, Math.max(16, 180 * r.progress), 16, 8); g.fill();
+    }
+  });
+}
+rooms.forEach(r => {
+  const { x, y, w, h } = r, cellY = r.row ? 280 : 0, cellH = r.row ? 190 : 200;
+  r.floorMat = new THREE.MeshStandardMaterial({ color: FLOORS[r.i % 5], roughness: 0.8 });
+  floor(x, cellY, w, cellH, r.floorMat, 0.6);
+  floor(r.dx - 22, r.row ? 276 : 196, 44, 8, r.floorMat, 0.95);
+  const rug = floor(r.center.x - 32, r.center.y - 20, 64, 40, '#e9c46a', 1.0);
+  // banheiro
+  const b = r.bathR;
+  floor(b.x, b.y, b.w, b.h, tileMat, 1.1);
+  const innerX = b.x, innerY = r.row ? b.y : b.y + b.h;
+  box(innerX, 11, b.y + b.h / 2, 4, 22, b.h, '#ced4da');
+  box(b.x + b.w / 2 + 10, 11, innerY, b.w - 20, 22, 4, '#ced4da');
+  const ty = r.row ? b.y + b.h - 16 : b.y + 16;
+  cyl(b.x + 16, 5, ty, 8, 10, '#ffffff'); box(b.x + 16, 12, r.row ? ty + 9 : ty - 9, 16, 12, 5, '#ffffff');
+  const tubY = r.row ? b.y + b.h - 22 : b.y + 22;
+  box(b.x + b.w - 20, 6, tubY, 26, 12, 40, '#ffffff'); box(b.x + b.w - 20, 11, tubY, 20, 2, 34, '#74c0fc', root, false);
+  // cama
+  const bd = r.bedR, bx = bd.x + bd.w / 2, bz = bd.y + bd.h / 2;
+  box(bx, 5, bz, bd.w + 6, 10, bd.h + 6, '#8d5524');
+  box(bx, 13, bz, bd.w, 6, bd.h, '#ffffff');
+  const pz = r.row ? bd.y + bd.h - 12 : bd.y + 12;
+  box(bx, 18, pz, bd.w - 14, 5, 14, '#e7f5ff');
+  box(bx, 22, r.row ? bd.y - 1 : bd.y + bd.h + 1, bd.w + 6, 24, 4, '#6d4c41').position.z = r.row ? bd.y + bd.h + 3 : bd.y - 3;
+  r.blanket = box(bx, 17, r.row ? bz - 10 : bz + 10, bd.w + 2, 4, bd.h - 26, '#4dabf7');
+  // TV e decoração
+  const tvZ = r.row ? y + h - 6 : y + 2;
+  box(x + w / 2 + 12, 18, tvZ, 40, 24, 4, '#212529');
+  box(x + w / 2 + 12, 18, r.row ? tvZ - 2.5 : tvZ + 2.5, 34, 18, 1, mat('#1c7ed6', { emissive: '#0b3d91', emissiveIntensity: 0.6 }), root, false);
+  plant(x + w - 16, r.row ? y + 18 : y + h - 22, 0.8);
+  // sujeira
+  r.dirt = new THREE.Group(); root.add(r.dirt);
+  const mess = box(bx, 17, bz, bd.w - 4, 5, bd.h - 30, '#74c0fc', r.dirt); mess.rotation.y = 0.45; mess.rotation.z = 0.12;
+  const stain = new THREE.Mesh(new THREE.CircleGeometry(12, 20), mat('#8d6e63', { transparent: true, opacity: 0.7 }));
+  stain.rotation.x = -Math.PI / 2; stain.position.set(r.center.x + 20, 1.3, r.center.y + 5); stain.scale.set(1.3, 0.8, 1); r.dirt.add(stain);
+  emojiSprite('🗑️', 18, r.dirt, r.center.x - 22, 10, r.center.y);
+  emojiSprite('🧦', 14, r.dirt, r.center.x + 36, 7, r.center.y - 18);
+  emojiSprite('🍕', 14, r.dirt, bd.x + bd.w + 18, 7, bd.y + 20);
+  r.fly = emojiSprite('🪰', 10, r.dirt, r.center.x, 30, r.center.y);
+  // placa
+  r.label = new THREE.Sprite(new THREE.SpriteMaterial({ map: roomLabelTex(r), transparent: true, depthWrite: false }));
+  r.label.scale.set(44, 21, 1); r.label.position.set(r.dx, WALL_H + 18, r.row ? 280 : 200); root.add(r.label);
+  // bloqueio
+  r.lock = new THREE.Group(); root.add(r.lock);
+  const lockBox = new THREE.Mesh(new THREE.BoxGeometry(w - 10, 40, cellH - 10), new THREE.MeshStandardMaterial({ color: '#111', transparent: true, opacity: 0.72 }));
+  lockBox.position.set(r.dx, 20, cellY + cellH / 2); r.lock.add(lockBox);
+  emojiSprite('🔒', 40, r.lock, r.dx, 70, cellY + cellH / 2);
+  textSprite(`Nível ${ROOM_UNLOCK[r.i]}`, { h: 16 }, r.lock, r.dx, 44, cellY + cellH / 2);
+  r.clickables = [lockBox];
+});
+
+// --------- recepção ---------
+box(DESK.x + DESK.w / 2, 14, DESK.y + DESK.h / 2, DESK.w, 28, DESK.h, '#6d4c41');
+box(DESK.x + DESK.w / 2, 29, DESK.y + DESK.h / 2, DESK.w + 6, 3, DESK.h + 6, '#a1887f');
+const deskHit = box(DESK.x + DESK.w / 2, 20, DESK.y + DESK.h / 2, DESK.w + 20, 40, DESK.h + 20, new THREE.MeshBasicMaterial({ visible: false }), root, false);
+deskHit.userData.pick = 'desk';
+emojiSprite('🛎️', 20, root, DESK.x + 22, 40, DESK.y + 16);
+box(DESK.x + DESK.w - 24, 38, DESK.y + 12, 22, 14, 2, '#343a40');
+textSprite('RECEPÇÃO', { h: 13, bg: '#6d4c41' }, root, DESK.x + DESK.w / 2, 20, DESK.y + DESK.h + 2);
+const alertSprite = emojiSprite('❗', 26, root, DESK.x + DESK.w / 2, 70, DESK.y + 16, true);
+box(275, 8, 480, 60, 16, 10, '#a1887f');
+
+// --------- estações ---------
+STATIONS.forEach(s => {
+  s.mat = new THREE.MeshStandardMaterial({ color: s.color, roughness: 0.6 });
+  const m = box(s.px, 16, s.y + s.h / 2, s.w, 32, s.h, s.mat);
+  m.userData.pick = 's:' + s.item;
+  box(s.px, 33, s.y + s.h / 2, s.w + 4, 3, s.h + 4, '#ffffff');
+  s.icon = emojiSprite(ITEMS[s.item].e, 26, root, s.px, 52, s.y + s.h / 2);
+  textSprite(s.name, { h: 12, bg: 'rgba(0,0,0,.6)' }, root, s.px, 16, s.y + s.h + 2);
+  s.lock = emojiSprite('🔒', 20, root, s.px, 80, s.y + s.h / 2);
+  s.lockTxt = textSprite(`Nível ${ITEMS[s.item].lvl}`, { h: 12 }, root, s.px, 64, s.y + s.h / 2);
+});
+
+// --------- sala da limpeza ---------
+const sr = STAFF_ROOM;
+const srFloor = floor(sr.x, sr.y, sr.w, sr.h, '#e5dbff', 0.9); srFloor.userData.pick = 'staff';
+for (let i = 0; i < 5; i++) box(sr.x + 20 + i * 36, 20, sr.y + 6, 30, 40, 10, i % 2 ? '#9775fa' : '#7950f2');
+const staffLabel = { sprite: null, n: -1 };
+emojiSprite('🧴', 16, root, sr.x + 12, 10, sr.y + 12);
+
+// --------- restaurante ---------
+const rs = RESTAURANT;
+floor(rs.x, rs.y, rs.w, rs.h, '#fff4e6', 0.9);
+textSprite('🍽️ RESTAURANTE', { h: 14, bg: '#d9480f' }, root, rs.x + rs.w / 2, 46, rs.y + 6);
+TABLES.forEach(([x, y]) => {
+  cyl(x, 8, y, 3, 16, '#495057'); cyl(x, 17, y, 15, 3, '#ffffff');
+  emojiSprite('🌷', 14, root, x, 27, y);
+  box(x - 22, 5, y, 14, 10, 14, '#e8590c'); box(x + 22, 5, y, 14, 10, 14, '#e8590c');
+});
+
+// --------- piscina ---------
+const pl = POOL;
+box(pl.x + pl.w / 2, 2, pl.y + pl.h / 2, pl.w + 16, 4, pl.h + 16, '#dee2e6');
+box(pl.x + pl.w / 2, 3, pl.y + pl.h / 2, pl.w, 4.5, pl.h, '#1864ab', root, false);
+const waveTex = canvasTex('waves', 128, 128, g => {
+  g.fillStyle = '#3399ff'; g.fillRect(0, 0, 128, 128); g.strokeStyle = '#ffffff55'; g.lineWidth = 4;
+  for (let i = 0; i < 4; i++) { g.beginPath(); for (let x = 0; x <= 128; x += 4) { const yy = 16 + i * 32 + Math.sin(x / 128 * Math.PI * 4) * 5; x ? g.lineTo(x, yy) : g.moveTo(x, yy); } g.stroke(); }
+});
+waveTex.wrapS = waveTex.wrapT = THREE.RepeatWrapping; waveTex.repeat.set(3, 2);
+const water = new THREE.Mesh(new THREE.PlaneGeometry(pl.w, pl.h), new THREE.MeshStandardMaterial({ map: waveTex, transparent: true, opacity: 0.8, roughness: 0.1, metalness: 0.1 }));
+water.rotation.x = -Math.PI / 2; water.position.set(pl.x + pl.w / 2, 14, pl.y + pl.h / 2); root.add(water);
+[[pl.x - 4, pl.y + pl.h / 2, 8, pl.h + 16], [pl.x + pl.w + 4, pl.y + pl.h / 2, 8, pl.h + 16]].forEach(([x, z, w, d]) => box(x, 8, z, w, 16, d, '#dee2e6'));
+box(pl.x + pl.w / 2, 8, pl.y - 4, pl.w, 16, 8, '#dee2e6'); box(pl.x + pl.w / 2, 8, pl.y + pl.h + 4, pl.w, 16, 8, '#dee2e6');
+textSprite('PISCINA', { h: 14, bg: '#1c7ed6' }, root, pl.x + pl.w / 2, 30, pl.y + pl.h + 8);
+POOL_SPOTS.filter(s => !s.water).forEach(s => { box(s.x, 4, s.y + 12, 22, 5, 40, '#ffec99'); box(s.x, 9, s.y + 28, 22, 10, 6, '#ffe066'); });
+cyl(1070, 22, 655, 2, 44, '#868e96'); const umb = new THREE.Mesh(new THREE.ConeGeometry(22, 10, 12), mat('#ff6b6b')); umb.position.set(1070, 46, 655); umb.castShadow = true; root.add(umb);
+function palm(x, z) { cyl(x, 30, z, 4, 60, '#8d5524'); for (let i = 0; i < 6; i++) { const l = box(x, 60, z, 6, 3, 44, '#2f9e44'); l.rotation.y = i * Math.PI / 3; l.rotation.x = 0.35; l.geometry.translate(0, 0, 20); } }
+palm(825, 700); palm(1085, 480);
+plant(20, 490); plant(365, 494, 0.8); plant(570, 700, 0.8);
+
+// --------- marcador de destino & anel do jogador ---------
+const markerMesh = new THREE.Mesh(new THREE.RingGeometry(10, 14, 32), new THREE.MeshBasicMaterial({ color: '#ffd43b', transparent: true }));
+markerMesh.rotation.x = -Math.PI / 2; markerMesh.visible = false; root.add(markerMesh);
+
+// ================== PERSONAGENS 3D ==================
+const G = {
+  body: new THREE.CapsuleGeometry(9, 12, 4, 12), head: new THREE.SphereGeometry(8.5, 18, 14),
+  hair: new THREE.SphereGeometry(9, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), eye: new THREE.SphereGeometry(1.4, 8, 6),
+  shadow: new THREE.CircleGeometry(11, 20),
+};
+const eyeMat = mat('#222'), shadowMat = new THREE.MeshBasicMaterial({ color: '#000', transparent: true, opacity: 0.25, depthWrite: false });
+function makeChar(bodyColor, skin, hair) {
+  const grp = new THREE.Group();
+  const inner = new THREE.Group(); grp.add(inner);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.6 });
+  const body = new THREE.Mesh(G.body, bodyMat); body.position.y = 15; body.castShadow = true; inner.add(body);
+  const head = new THREE.Mesh(G.head, mat(skin)); head.position.y = 36; head.castShadow = true; inner.add(head);
+  const hr = new THREE.Mesh(G.hair, mat(hair)); hr.position.set(0, 37.5, -1); hr.rotation.x = -0.25; inner.add(hr);
+  [-3.2, 3.2].forEach(ex => { const e = new THREE.Mesh(G.eye, eyeMat); e.position.set(ex, 36.5, 7.8); inner.add(e); });
+  const sh = new THREE.Mesh(G.shadow, shadowMat); sh.rotation.x = -Math.PI / 2; sh.position.y = 1.5; grp.add(sh);
+  root.add(grp);
+  return { grp, inner, bodyMat, sh };
+}
+function placeChar(m, e, lift = 0) {
+  const bob = e.moving ? Math.abs(Math.sin(performance.now() / 110)) * 3 : 0;
+  m.grp.position.set(e.x, lift, e.y);
+  m.inner.position.y = bob;
+  m.inner.rotation.set(0, e.ang ?? 0, 0);
+}
+
+// jogador
+const pm = makeChar(S.color, '#ffdbac', '#5c3a1e');
+box(0, 20, 8.5, 3, 3, 2, '#f4c95d', pm.inner, false); box(0, 13, 8.5, 3, 3, 2, '#f4c95d', pm.inner, false);
+const ring = new THREE.Mesh(new THREE.RingGeometry(13, 16, 32), new THREE.MeshBasicMaterial({ color: '#ffd43b', transparent: true, opacity: 0.85 }));
+ring.rotation.x = -Math.PI / 2; ring.position.y = 1.8; pm.grp.add(ring);
+let hatSprite = null, hatShown = null;
+const carrySprites = [0, 1, 2].map(() => { const s = emojiSprite('🧺', 18, pm.grp, 0, 0, 0, true); s.visible = false; return s; });
+textSprite('VOCÊ', { h: 10, bg: '#2f6fedcc' }, pm.grp, 0, -4, 20);
+
+function guestMesh(g) {
+  if (g.m) return g.m;
+  const m = makeChar(g.color, g.skin, g.hair);
+  m.bag = new THREE.Group(); m.grp.add(m.bag);
+  box(14, 9, 0, 8, 14, 14, '#a0522d', m.bag); box(14, 17, 0, 2, 3, 6, '#5c3a1e', m.bag, false);
+  m.icon = emojiSprite('💤', 16, m.grp, 14, 58, 0, true);
+  const c = document.createElement('canvas'); c.width = 128; c.height = 150;
+  m.bctx = c.getContext('2d'); m.btex = new THREE.CanvasTexture(c); m.btex.colorSpace = THREE.SRGBColorSpace;
+  m.bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: m.btex, transparent: true, depthTest: false, depthWrite: false }));
+  m.bubble.renderOrder = 12; m.bubble.scale.set(32, 37.5, 1); m.bubble.position.y = 74; m.grp.add(m.bubble);
+  m.bkey = '';
+  g.m = m; return m;
+}
+function removeGuestMesh(g) { if (g.m) { root.remove(g.m.grp); g.m.bubble.material.dispose(); g.m.btex.dispose(); } }
+function drawBubble(m, e, frac, glow) {
+  const key = `${e}|${Math.round(frac * 24)}|${glow}`;
+  if (key === m.bkey) return; m.bkey = key;
+  const g = m.bctx; g.clearRect(0, 0, 128, 150);
+  g.fillStyle = glow ? '#d3f9d8' : '#fff'; rrPath(g, 6, 4, 116, 112, 26); g.fill();
+  g.lineWidth = glow ? 8 : 4; g.strokeStyle = glow ? '#2f9e44' : '#0006'; g.stroke();
+  g.fillStyle = glow ? '#d3f9d8' : '#fff'; g.beginPath(); g.moveTo(50, 114); g.lineTo(78, 114); g.lineTo(64, 140); g.fill();
+  g.font = `60px ${EMOJI_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(e, 64, 52);
+  g.fillStyle = '#0005'; rrPath(g, 18, 88, 92, 14, 7); g.fill();
+  g.fillStyle = frac > 0.5 ? '#51cf66' : frac > 0.25 ? '#fcc419' : '#ff6b6b'; rrPath(g, 18, 88, Math.max(14, 92 * clamp(frac, 0, 1)), 14, 7); g.fill();
+  m.btex.needsUpdate = true;
+}
+
+function cleanerMesh(c) {
+  if (c.m) return c.m;
+  const m = makeChar('#7048e8', '#f1c27d', '#3b2b20');
+  box(0, 14, 8, 14, 16, 2, '#ffffff', m.inner, false);
+  m.broom = new THREE.Group(); m.broom.position.set(13, 0, 4); m.inner.add(m.broom);
+  cyl(0, 18, 0, 1.3, 36, '#c0703c', m.broom, 8); box(0, 2, 0, 12, 5, 4, '#fcc419', m.broom);
+  m.spark = emojiSprite('✨', 14, m.grp, -12, 50, 0, true);
+  c.m = m; return m;
+}
+
+// ================== FLOATS ==================
+function float(x, y, text, color = '#fff') {
+  const s = textSprite(text, { color, bg: null, h: 16, top: true }, root, x, 70, y);
+  floats.push({ s, t: 1.6 });
+}
+
+// ================== SYNC VISUAL ==================
+const tmpV = new THREE.Vector3();
+function syncVisuals(t, dt) {
+  // quartos
+  rooms.forEach(r => {
+    const dirty = r.state === 'dirty' || r.state === 'cleaning';
+    r.dirt.visible = dirty; r.blanket.visible = !dirty;
+    r.floorMat.color.set(dirty ? '#c9b99a' : FLOORS[r.i % 5]);
+    r.fly.position.set(r.center.x + 10 + Math.sin(t * 5 + r.i) * 10, 28 + Math.cos(t * 7) * 4, r.center.y - 10 + Math.cos(t * 4) * 6);
+    r.lock.visible = !isUnlocked(r);
+    const tex = roomLabelTex(r); if (r.label.material.map !== tex) { r.label.material.map = tex; r.label.material.needsUpdate = true; }
+  });
+  // estações
+  STATIONS.forEach(s => {
+    const locked = S.level < ITEMS[s.item].lvl;
+    const wanted = !locked && guests.some(g => g.req && g.req.type === s.item);
+    s.lock.visible = s.lockTxt.visible = locked;
+    s.icon.visible = !locked;
+    s.icon.position.y = 52 + (wanted ? Math.sin(t * 6) * 4 : 0);
+    s.mat.color.set(locked ? '#555' : s.color);
+    s.mat.emissive.set(wanted ? '#ffd43b' : '#000'); s.mat.emissiveIntensity = wanted ? 0.25 + 0.2 * Math.sin(t * 6) : 0;
+  });
+  alertSprite.visible = queueList().length > 0;
+  alertSprite.position.y = 70 + Math.sin(t * 6) * 4;
+  if (staffLabel.n !== cleaners.length) {
+    if (staffLabel.sprite) root.remove(staffLabel.sprite);
+    staffLabel.n = cleaners.length;
+    staffLabel.sprite = textSprite(`🧹 EQUIPE DE LIMPEZA (${cleaners.length})`, { h: 13, bg: '#5f3dc4' }, root, sr.x + sr.w / 2, 52, sr.y + 6);
+  }
+  waveTex.offset.x = (t * 0.03) % 1; waveTex.offset.y = Math.sin(t * 0.5) * 0.02;
+  // jogador
+  placeChar(pm, player);
+  pm.bodyMat.color.set(S.color);
+  if (hatShown !== S.hat) {
+    if (hatSprite) pm.inner.remove(hatSprite);
+    hatSprite = S.hat ? emojiSprite(S.hat, 22, pm.inner, 0, 50, 0) : null; hatShown = S.hat;
+  }
+  ring.material.opacity = 0.55 + 0.3 * Math.sin(t * 4);
+  carrySprites.forEach((s, i) => {
+    const it = player.carry[i];
+    s.visible = !!it;
+    if (it) {
+      if (s.userData.it !== it) { s.material.map = emojiTex(ITEMS[it].e); s.material.needsUpdate = true; s.userData.it = it; }
+      s.position.set((i - (player.carry.length - 1) / 2) * 18, (S.hat ? 70 : 58) + Math.sin(t * 5 + i) * 1.5, 0);
+    }
+  });
+  // hóspedes
+  guests.forEach(g => {
+    const m = guestMesh(g);
+    const lying = g.act === 'sleep' && !g.req && !g.path.length;
+    const inWater = g.act === 'pool' && g.spot && g.spot.water && !g.path.length;
+    const onLounger = g.act === 'pool' && g.spot && !g.spot.water && !g.path.length;
+    placeChar(m, g, inWater ? -12 : 0);
+    if (lying) {
+      const r = g.room, top = !r.row;
+      m.grp.position.set(r.bed.x, 20, r.bed.y + (top ? 16 : -16));
+      m.inner.rotation.set(top ? -Math.PI / 2 : Math.PI / 2, 0, 0); m.inner.position.y = 0;
+    } else if (onLounger) {
+      m.grp.position.set(g.x, 10, g.y - 4);
+      m.inner.rotation.set(1.2, 0, 0);
+    } else if (g.act === 'food' && !g.path.length) {
+      m.inner.rotation.y = Math.PI / 2; m.grp.position.y = 2;
+    }
+    m.sh.visible = !lying && !inWater;
+    m.bag.visible = g.bag;
+    const showIcon = g.act && !g.req && !g.path.length;
+    m.icon.visible = !!showIcon;
+    if (showIcon) {
+      const tex = emojiTex(ACT_ICON[g.act]); if (m.icon.material.map !== tex) { m.icon.material.map = tex; m.icon.material.needsUpdate = true; }
+      m.icon.position.set(14, (lying ? 40 : 58) + Math.sin(t * 3) * 2, 0);
+    }
+    if (g.inQueue) { m.bubble.visible = true; drawBubble(m, '🛎️', g.pat / g.patMax, false); }
+    else if (g.req) { m.bubble.visible = true; drawBubble(m, ITEMS[g.req.type].e, g.req.t / g.req.max, player.carry.includes(g.req.type)); }
+    else m.bubble.visible = false;
+    m.bubble.position.y = lying ? 60 : 74;
+  });
+  // limpeza
+  cleaners.forEach(c => {
+    const m = cleanerMesh(c);
+    placeChar(m, c);
+    const cl = c.state === 'cleaning';
+    m.broom.rotation.z = cl ? Math.sin(t * 12) * 0.5 : 0.15;
+    m.spark.visible = cl; m.spark.position.y = 50 + Math.sin(t * 8) * 4;
+  });
+  // floats
+  floats.forEach(f => { f.t -= dt; f.s.position.y += 26 * dt; f.s.material.opacity = clamp(f.t, 0, 1); });
+  floats.filter(f => f.t <= 0).forEach(f => { root.remove(f.s); f.s.material.dispose(); });
+  floats = floats.filter(f => f.t > 0);
+  // marcador
+  if (marker) {
+    marker.t -= dt;
+    markerMesh.visible = marker.t > 0;
+    markerMesh.position.set(marker.x, 2, marker.y);
+    const k = 1.6 - marker.t; markerMesh.scale.set(k, k, k); markerMesh.material.opacity = marker.t / 0.6;
+    if (marker.t <= 0) marker = null;
+  }
+}
+
+// ================== CÂMERA ==================
+let follow = false;
+const lastTarget = new THREE.Vector3();
+$('camBtn').onclick = () => {
+  follow = !follow; $('camBtn').classList.toggle('on', follow);
+  if (follow) {
+    const p = new THREE.Vector3(player.x - W / 2, 0, player.y - H / 2);
+    const off = new THREE.Vector3(0, 380, 330);
+    camera.position.copy(p).add(off); controls.target.copy(p);
+  }
+};
+$('viewBtn').onclick = () => {
+  follow = false; $('camBtn').classList.remove('on');
+  camera.position.copy(OVERVIEW.pos); controls.target.copy(OVERVIEW.target);
+};
+function updateCamera() {
+  if (follow) {
+    const p = new THREE.Vector3(player.x - W / 2, 0, player.y - H / 2);
+    const d = p.sub(controls.target).multiplyScalar(0.08);
+    controls.target.add(d); camera.position.add(d);
+  }
+  controls.target.x = clamp(controls.target.x, -W / 2, W / 2);
+  controls.target.z = clamp(controls.target.z, -H / 2, H / 2);
+  controls.update();
+}
+
+function resize() {
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  renderer.setSize(w, h); camera.aspect = w / h;
+  // afasta a câmera em telas estreitas para caber o hotel
+  camera.fov = w / h < 1.2 ? 60 : 42;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+
+// ================== INPUT ==================
+const raycaster = new THREE.Raycaster();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const pickables = [deskHit, srFloor, ...root.children.filter(o => o.userData.pick && o.userData.pick.startsWith('s:'))];
+rooms.forEach(r => pickables.push(...r.clickables.map(o => { o.userData.pick = 'lock:' + r.i; return o; })));
+let downAt = null;
+renderer.domElement.addEventListener('pointerdown', e => { downAt = { x: e.clientX, y: e.clientY, b: e.button }; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!downAt || downAt.b !== 0) return;
+  const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y); downAt = null;
+  if (moved > 7 || paused) return;
+  handleClick(e.clientX, e.clientY);
+});
+renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+
+function handleClick(cx, cy) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const ndc = new THREE.Vector2(((cx - rect.left) / rect.width) * 2 - 1, -((cy - rect.top) / rect.height) * 2 + 1);
+  // 1) hóspedes (distância na tela)
+  let best = null, bd = 34;
+  guests.forEach(g => {
+    if (!g.m) return;
+    g.m.grp.getWorldPosition(tmpV); tmpV.y += 22; tmpV.project(camera);
+    const sx = (tmpV.x + 1) / 2 * rect.width + rect.left, sy = (1 - tmpV.y) / 2 * rect.height + rect.top;
+    const d = Math.hypot(sx - cx, sy - cy);
+    if (d < bd && tmpV.z < 1) { bd = d; best = g; }
+  });
+  if (best) { clickGuest(best); return; }
+  raycaster.setFromCamera(ndc, camera);
+  // 2) objetos
+  const hit = raycaster.intersectObjects(pickables, false)[0];
+  if (hit) {
+    const k = hit.object.userData.pick;
+    if (k === 'desk') { marker = { ...STAFF_SPOT, t: 0.6 }; goTo(player, STAFF_SPOT, doCheckin); return; }
+    if (k === 'staff') { toast('🧹 Sala da equipe de limpeza. Só eles limpam os quartos!'); return; }
+    if (k.startsWith('s:')) { clickStation(STATIONS.find(s => s.item === k.slice(2))); return; }
+    if (k.startsWith('lock:')) { const r = rooms[+k.slice(5)]; if (!isUnlocked(r)) { toast(`🔒 Quarto ${r.num} desbloqueia no nível ${ROOM_UNLOCK[r.i]}`); return; } }
+  }
+  // 3) chão
+  const pt = new THREE.Vector3();
+  if (!raycaster.ray.intersectPlane(groundPlane, pt)) return;
+  const p = { x: pt.x + W / 2, y: pt.z + H / 2 };
+  if (p.x < 0 || p.x > W || p.y < 0 || p.y > H) return;
+  const z = zoneOf(p);
+  if (z.t === 'room') {
+    const r = rooms[z.i];
+    if (!isUnlocked(r)) { toast(`🔒 Quarto ${r.num} desbloqueia no nível ${ROOM_UNLOCK[r.i]}`); return; }
+    if (r.state === 'dirty' || r.state === 'cleaning') toast('🧹 Só a equipe de limpeza pode limpar. Você cuida dos hóspedes!');
+  }
+  const tp = { x: clamp(p.x, 20, W - 20), y: clamp(p.y, 22, H - 12) };
+  marker = { ...tp, t: 0.6 };
+  goTo(player, tp);
+}
+function clickGuest(g) {
+  if (g.inQueue) { marker = { ...STAFF_SPOT, t: 0.6 }; goTo(player, STAFF_SPOT, doCheckin); return; }
+  if (g.req) {
+    if (!player.carry.includes(g.req.type)) { const it = ITEMS[g.req.type]; toast(`O hóspede quer ${it.e} ${it.n}. Pegue na ${it.st}!`); return; }
+    marker = { x: g.x, y: g.y, t: 0.6 }; goTo(player, g, () => deliver(g)); return;
+  }
+  if (g.act) toast(`Esse hóspede está ${ACT_TXT[g.act]} ${ACT_ICON[g.act]}`);
+  else toast('🧳 Hóspede de passagem.');
+}
+function clickStation(s) {
+  const it = ITEMS[s.item];
+  if (S.level < it.lvl) { toast(`🔒 ${s.name} libera no nível ${it.lvl}`); return; }
+  marker = { x: s.px, y: s.py, t: 0.6 };
+  goTo(player, { x: s.px, y: s.py }, () => {
+    if (player.carry.length >= 1 + S.up.cap) { toast('🙌 Mãos cheias! Entregue algo ou compre a Bandeja Extra.'); return; }
+    player.carry.push(s.item); float(player.x, player.y, `${it.e} pegou!`, '#fff');
+  });
+}
+window.addEventListener('keydown', e => { if (e.code === 'Space') togglePause(); });
+
+// ================== HUD ==================
+function hud() {
+  $('coins').textContent = Math.floor(S.coins);
+  $('gems').textContent = S.gems;
+  $('lvl').textContent = S.level;
+  $('xp').style.width = (S.xp / need(S.level) * 100) + '%';
+  $('rep').textContent = S.rep.toFixed(1);
+  $('carry').textContent = player.carry.length ? player.carry.map(i => ITEMS[i].e).join(' ') + ` (${player.carry.length}/${1 + S.up.cap})` : 'mãos livres';
+  $('boost').style.display = S.boostT > 0 ? '' : 'none';
+  $('boostT').textContent = Math.ceil(S.boostT) + 's';
+  $('pauseOv').style.display = paused && $('modal').classList.contains('hidden') ? 'flex' : 'none';
+}
+$('drop').onclick = () => { player.carry = []; toast('Itens devolvidos.'); };
+$('shopBtn').onclick = () => openShop('up');
+$('addGems').onclick = () => openShop('iap');
+$('helpBtn').onclick = openHelp;
+$('pauseBtn').onclick = togglePause;
+function togglePause() { if (!$('modal').classList.contains('hidden')) return; paused = !paused; $('pauseBtn').textContent = paused ? '▶️' : '⏸️'; }
+
+// ================== MODAIS ==================
+function openModal(html) { $('box').innerHTML = html; $('modal').classList.remove('hidden'); paused = true; }
+function closeModal() { $('modal').classList.add('hidden'); paused = false; $('pauseBtn').textContent = '⏸️'; save(); }
+$('modal').addEventListener('pointerdown', e => { if (e.target.id === 'modal') closeModal(); });
+
+let shopTab = 'up';
+function openShop(tab) { shopTab = tab || shopTab; renderShop(); }
+function renderShop() {
+  const tabs = [['up', '⚙️ Melhorias'], ['look', '👔 Personagem'], ['gem', '💎 Itens Especiais'], ['iap', '💳 Comprar Gemas']]
+    .map(([k, n]) => `<button class="${k === shopTab ? 'on' : ''}" data-tab="${k}">${n}</button>`).join('');
+  let body = '';
+  if (shopTab === 'up') {
+    body = '<div class="grid">' + UPGRADES.map(u => {
+      const l = S.up[u.k], maxed = l >= u.max, c = u.cost(l);
+      return `<div class="card"><div class="big">${u.e}</div><div class="n">${u.n}</div><div class="d">${u.d}</div>
+        <div class="lvlbar">${Array.from({ length: u.max }, (_, i) => `<i class="${i < l ? 'f' : ''}"></i>`).join('')}</div>
+        <button data-up="${u.k}" ${maxed || S.coins < c ? 'disabled' : ''}>${maxed ? 'MÁXIMO' : `🪙 ${c}`}</button></div>`;
+    }).join('') + '</div>';
+  } else if (shopTab === 'look') {
+    body = '<h3>Chapéus</h3><div class="grid">' + HATS.map((h, i) => {
+      const own = S.hats.includes(h.e), eq = S.hat === h.e;
+      const label = eq ? 'Usando' : own ? 'Usar' : h.g ? `💎 ${h.g}` : `🪙 ${h.c}`;
+      const can = own || (h.g ? S.gems >= h.g : S.coins >= h.c);
+      return `<div class="card ${eq ? 'eq' : ''}"><div class="big">${h.e || '🙂'}</div><div class="n">${h.n}</div>
+        <button data-hat="${i}" ${eq || !can ? 'disabled' : ''}>${label}</button></div>`;
+    }).join('') + '</div><h3>Cor do uniforme</h3><div class="grid">' + COLORS.map((c, i) => {
+      const own = S.colors.includes(c.c), eq = S.color === c.c;
+      const label = eq ? 'Usando' : own ? 'Usar' : c.g ? `💎 ${c.g}` : `🪙 ${c.cost}`;
+      const can = own || (c.g ? S.gems >= c.g : S.coins >= c.cost);
+      return `<div class="card ${eq ? 'eq' : ''}"><div class="swatch" style="background:${c.c}"></div><div class="n">${c.n}</div>
+        <button data-col="${i}" ${eq || !can ? 'disabled' : ''}>${label}</button></div>`;
+    }).join('') + '</div>';
+  } else if (shopTab === 'gem') {
+    body = '<div class="grid">' + GEM_SHOP.map((g, i) => `<div class="card"><div class="big">${g.e}</div><div class="n">${g.n}</div><div class="d">${g.d}</div>
+      <button data-gem="${i}" ${S.gems < g.g ? 'disabled' : ''}>💎 ${g.g}</button></div>`).join('') + '</div>';
+  } else {
+    body = `<div class="demo">🧪 <b>Modo demonstração:</b> esta loja simula compras dentro do app. Nenhum pagamento real é feito — as gemas são adicionadas de graça.</div>
+      <div class="grid">` + PACKS.map((p, i) => `<div class="card"><div class="big">${p.e}</div><div class="n">${p.g} gemas ${p.tag ? `⭐ ${p.tag}` : ''}</div>
+      <button data-pack="${i}">${p.p}</button></div>`).join('') + '</div>';
+  }
+  openModal(`<button class="close" id="cls">✕</button><h2>🛒 Loja do Hotel</h2>
+    <div style="margin-bottom:8px">🪙 <b>${Math.floor(S.coins)}</b> &nbsp; 💎 <b>${S.gems}</b></div><div class="tabs">${tabs}</div>${body}`);
+  $('cls').onclick = closeModal;
+  $('box').querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { shopTab = b.dataset.tab; renderShop(); });
+  $('box').querySelectorAll('[data-up]').forEach(b => b.onclick = () => {
+    const u = UPGRADES.find(u => u.k === b.dataset.up), c = u.cost(S.up[u.k]);
+    if (S.coins >= c && S.up[u.k] < u.max) { S.coins -= c; S.up[u.k]++; toast(`✅ ${u.n} nível ${S.up[u.k]}!`); renderShop(); }
+  });
+  $('box').querySelectorAll('[data-hat]').forEach(b => b.onclick = () => {
+    const h = HATS[b.dataset.hat];
+    if (!S.hats.includes(h.e)) { if (h.g) S.gems -= h.g; else S.coins -= h.c; S.hats.push(h.e); }
+    S.hat = h.e; renderShop();
+  });
+  $('box').querySelectorAll('[data-col]').forEach(b => b.onclick = () => {
+    const c = COLORS[b.dataset.col];
+    if (!S.colors.includes(c.c)) { if (c.g) S.gems -= c.g; else S.coins -= c.cost; S.colors.push(c.c); }
+    S.color = c.c; renderShop();
+  });
+  $('box').querySelectorAll('[data-gem]').forEach(b => b.onclick = () => {
+    const g = GEM_SHOP[b.dataset.gem]; if (S.gems < g.g) return;
+    S.gems -= g.g; g.act(); toast(`✅ ${g.n} ativado!`); renderShop();
+  });
+  $('box').querySelectorAll('[data-pack]').forEach(b => b.onclick = () => {
+    const p = PACKS[b.dataset.pack];
+    if (confirm(`Comprar ${p.g} gemas por ${p.p}?\n\n(Demonstração — nenhum valor real será cobrado.)`)) { S.gems += p.g; toast(`💎 +${p.g} gemas!`); renderShop(); }
+  });
+}
+function openHelp() {
+  openModal(`<button class="close" id="cls">✕</button><div class="help"><h2>🏨 Bem-vindo ao Hotel Mariah 3D!</h2>
+    <p>Você é o <b>concierge</b> do hotel: seu trabalho é realizar as vontades dos hóspedes. 🛎️</p>
+    <ul>
+      <li>🖱️ <b>Clique</b> no chão para andar. <b>Arraste</b> para girar a câmera, use o <b>scroll</b> para zoom e o botão direito para mover a visão.</li>
+      <li>🎥 <b>Seguir</b> faz a câmera acompanhar você. 🗺️ mostra o hotel inteiro.</li>
+      <li>🛎️ Hóspedes chegam na <b>Recepção</b>. Clique no balcão para fazer o <b>check-in</b>.</li>
+      <li>💭 Os hóspedes vão ao quarto, dormem 💤, usam o banheiro 🚿, curtem a piscina 🏊 e o restaurante 🍽️.</li>
+      <li>🧺🍔🍹☕ Quando aparecer um <b>balão</b>, pegue o item na estação certa e clique no hóspede para entregar. Rápido = mais gorjeta!</li>
+      <li>🧳 Ao ir embora, o hóspede paga a diária e deixa o quarto <b>sujo</b>. A <b>equipe de limpeza 🧹</b> cuida disso — você não limpa!</li>
+      <li>⭐ Suba de <b>nível</b> para desbloquear novos quartos e estações.</li>
+      <li>🛒 Na <b>Loja</b>, compre melhorias, contrate faxineiros e personalize seu personagem.</li>
+      <li>⌨️ Espaço = pausar.</li>
+    </ul>
+    <p style="opacity:.7">Atendidos: ${S.served} pedidos.</p>
+    <button class="btn" id="go">Bora trabalhar! 🚀</button> &nbsp; <button class="close" style="float:none" id="reset">Recomeçar do zero</button></div>`);
+  $('cls').onclick = $('go').onclick = () => { S.seenHelp = true; closeModal(); };
+  $('reset').onclick = () => { if (confirm('Apagar todo o progresso?')) { localStorage.removeItem('hotelMariah_v1'); location.reload(); } };
+}
+function levelUp(msgs) {
+  openModal(`<div style="text-align:center"><div style="font-size:60px">🎉</div><h2>Nível ${S.level}!</h2>
+    ${msgs.map(m => `<p style="font-size:17px">${m}</p>`).join('')}<button class="btn" id="ok">Continuar</button></div>`);
+  $('ok').onclick = closeModal;
+}
+
+// ================== START ==================
+resize();
+syncCleaners();
+$('loading').remove();
+let last = performance.now(), hudT = 0;
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!paused) update(dt);
+  syncVisuals(now / 1000, paused ? 0 : dt);
+  updateCamera();
+  renderer.render(scene, camera);
+  hudT -= dt; if (hudT <= 0) { hudT = 0.15; hud(); }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+if (!S.seenHelp) openHelp();
+</script>
+</body>
+</html>

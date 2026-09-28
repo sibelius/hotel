@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hotel Mariah</title>
+<style>
+  :root { --bg:#1d1b2f; --panel:#2b2845; --gold:#f4c95d; --txt:#fff; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:radial-gradient(circle at top,#3a3560,#15131f); color:var(--txt);
+    font-family: "Trebuchet MS", system-ui, sans-serif; overflow:hidden; user-select:none; }
+  #hud { display:flex; gap:8px; align-items:center; padding:8px 12px; flex-wrap:wrap; }
+  .pill { background:var(--panel); border:2px solid #4a4570; border-radius:999px; padding:6px 12px; display:flex; gap:6px; align-items:center; font-size:15px; }
+  .pill b { color:var(--gold); }
+  .pill button, .btn { background:var(--gold); color:#3a2a00; border:0; border-radius:999px; font-weight:bold; cursor:pointer; font-family:inherit; }
+  .pill button { padding:2px 8px; font-size:12px; }
+  .btn { padding:8px 14px; font-size:15px; box-shadow:0 3px 0 #b58a1f; }
+  .btn:active { transform:translateY(2px); box-shadow:0 1px 0 #b58a1f; }
+  .xpbar { width:90px; height:8px; background:#15131f; border-radius:9px; overflow:hidden; }
+  .xpbar i { display:block; height:100%; width:0; background:linear-gradient(90deg,#69db7c,#38d9a9); }
+  .spacer { flex:1; }
+  #title { font-weight:bold; font-size:18px; color:var(--gold); margin-right:6px; }
+  #wrap { position:absolute; top:58px; left:0; right:0; bottom:30px; display:flex; align-items:center; justify-content:center; }
+  canvas { border-radius:14px; box-shadow:0 10px 40px #0008; cursor:pointer; }
+  #tip { position:absolute; bottom:6px; left:0; right:0; text-align:center; font-size:13px; opacity:.75; }
+  #toast { position:fixed; top:70px; left:50%; transform:translateX(-50%); background:#000c; padding:10px 18px; border-radius:12px;
+    font-size:16px; pointer-events:none; opacity:0; transition:opacity .25s; z-index:20; max-width:90vw; text-align:center; }
+  #modal { position:fixed; inset:0; background:#0009; display:flex; align-items:center; justify-content:center; z-index:30; }
+  #modal.hidden { display:none; }
+  .box { background:var(--panel); border:3px solid var(--gold); border-radius:18px; padding:18px; width:min(720px,94vw); max-height:88vh; overflow:auto; }
+  .box h2 { margin:0 0 10px; color:var(--gold); }
+  .tabs { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+  .tabs button { background:#3d3960; color:#fff; border:0; padding:8px 12px; border-radius:10px; cursor:pointer; font-family:inherit; font-size:14px; }
+  .tabs button.on { background:var(--gold); color:#3a2a00; font-weight:bold; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; }
+  .card { background:#3d3960; border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:6px; }
+  .card .big { font-size:34px; text-align:center; }
+  .card .n { font-weight:bold; }
+  .card .d { font-size:12px; opacity:.8; }
+  .card button { background:var(--gold); border:0; border-radius:8px; padding:7px; font-weight:bold; cursor:pointer; font-family:inherit; }
+  .card button:disabled { background:#6c6890; color:#bbb; cursor:not-allowed; }
+  .card.eq { outline:3px solid #69db7c; }
+  .lvlbar { display:flex; gap:3px; } .lvlbar i { flex:1; height:6px; border-radius:3px; background:#15131f; } .lvlbar i.f { background:#69db7c; }
+  .close { float:right; background:#e03131; color:#fff; border:0; border-radius:8px; padding:6px 10px; cursor:pointer; font-weight:bold; }
+  .demo { background:#15131f; border-radius:10px; padding:8px 10px; font-size:12px; opacity:.85; margin-bottom:10px; }
+  .help p, .help li { line-height:1.5; }
+  .swatch { width:40px; height:40px; border-radius:50%; margin:0 auto; border:3px solid #fff; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span id="title">🏨 Hotel Mariah</span>
+  <div class="pill">🪙 <b id="coins">0</b></div>
+  <div class="pill">💎 <b id="gems">0</b> <button id="addGems">+</button></div>
+  <div class="pill">Nível <b id="lvl">1</b><div class="xpbar"><i id="xp"></i></div></div>
+  <div class="pill">⭐ <b id="rep">3.0</b></div>
+  <div class="pill">🫴 <span id="carry">mãos livres</span> <button id="drop">largar</button></div>
+  <div class="pill" id="boost" style="display:none">⚡ 2x <b id="boostT"></b></div>
+  <div class="spacer"></div>
+  <button class="btn" id="shopBtn">🛒 Loja</button>
+  <button class="btn" id="helpBtn">❓</button>
+  <button class="btn" id="pauseBtn">⏸️</button>
+</div>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div id="tip">Clique para andar • 🛎️ Recepção = check-in • Pegue itens nas estações e entregue aos hóspedes • A equipe 🧹 limpa os quartos</div>
+<div id="toast"></div>
+<div id="modal" class="hidden"><div class="box" id="box"></div></div>
+
+<script>
+// ================== CONFIG ==================
+const W = 1100, H = 720;
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+const ITEMS = {
+  toalha: { e: '🧺', n: 'Toalhas', lvl: 1, st: 'Lavanderia' },
+  comida: { e: '🍔', n: 'Comida', lvl: 1, st: 'Cozinha' },
+  bebida: { e: '🍹', n: 'Bebida', lvl: 3, st: 'Bar' },
+  cafe:   { e: '☕', n: 'Café',   lvl: 5, st: 'Cafeteria' },
+};
+const STATIONS = [
+  { item: 'toalha', name: 'Lavanderia', x: 390, y: 482, w: 80, h: 46, color: '#a5d8ff' },
+  { item: 'comida', name: 'Cozinha',    x: 485, y: 482, w: 80, h: 46, color: '#ffc9c9' },
+  { item: 'bebida', name: 'Bar',        x: 580, y: 482, w: 80, h: 46, color: '#d0bfff' },
+  { item: 'cafe',   name: 'Cafeteria',  x: 675, y: 482, w: 80, h: 46, color: '#e6c9a8' },
+];
+STATIONS.forEach(s => { s.px = s.x + s.w / 2; s.py = s.y + s.h + 20; });
+
+const DESK = { x: 200, y: 530, w: 150, h: 32 };
+const STAFF_SPOT = { x: 275, y: 507 };
+const QSLOTS = [[275, 600], [275, 638], [238, 668], [200, 695], [160, 700]].map(([x, y]) => ({ x, y }));
+const CHECKOUT_PT = { x: 335, y: 600 };
+const EXIT = { x: 90, y: 712 };
+const C0 = { x: 90, y: 240 }, B0 = { x: 90, y: 520 };
+const STAFF_ROOM = { x: 370, y: 630, w: 190, h: 84 };
+const RESTAURANT = { x: 580, y: 590, w: 235, h: 124 };
+const POOL = { x: 840, y: 492, w: 245, h: 145 };
+const TABLES = [[630, 625], [700, 625], [770, 625], [630, 685], [700, 685], [770, 685]];
+const FOOD_SPOTS = TABLES.map(([x, y]) => ({ x: x - 22, y, taken: false }));
+const POOL_SPOTS = [[885, 540], [960, 590], [1035, 535], [1000, 610], [870, 676], [920, 676], [970, 676], [1020, 676], [1068, 676]]
+  .map(([x, y]) => ({ x, y, taken: false }));
+const ROOM_UNLOCK = [1, 1, 2, 3, 4, 5, 6, 8, 10, 12];
+
+const REQ_BY = {
+  sleep: ['toalha', 'comida', 'cafe'], bath: ['toalha'], pool: ['bebida', 'toalha'],
+  food: ['comida', 'bebida', 'cafe'], room: ['comida', 'cafe', 'toalha', 'bebida'],
+};
+const ACT_ICON = { sleep: '💤', bath: '🚿', pool: '🏊', food: '🍽️', room: '📺' };
+const ACT_TXT = { sleep: 'dormindo', bath: 'no banheiro', pool: 'curtindo a piscina', food: 'no restaurante', room: 'vendo TV no quarto' };
+
+const UPGRADES = [
+  { k: 'speed', e: '👟', n: 'Tênis Turbo', d: 'Você anda mais rápido', max: 5, cost: l => 60 + l * 60 },
+  { k: 'cap', e: '🍽️', n: 'Bandeja Extra', d: 'Carregue +1 item por vez', max: 2, cost: l => 200 + l * 300 },
+  { k: 'tips', e: '😁', n: 'Sorriso Nota 10', d: '+20% de gorjeta por nível', max: 5, cost: l => 80 + l * 70 },
+  { k: 'decor', e: '🪴', n: 'Decoração Chique', d: 'Hóspedes ficam mais pacientes', max: 5, cost: l => 90 + l * 80 },
+  { k: 'price', e: '🛎️', n: 'Quartos Luxo', d: '+15% no valor das diárias', max: 5, cost: l => 120 + l * 120 },
+  { k: 'cleaners', e: '🧹', n: 'Contratar Faxineiro', d: '+1 funcionário da limpeza', max: 4, cost: l => 150 + l * 150 },
+  { k: 'clean', e: '🧴', n: 'Produtos de Limpeza', d: 'Equipe limpa mais rápido', max: 5, cost: l => 80 + l * 80 },
+];
+const HATS = [
+  { e: '🧢', n: 'Boné', c: 0 }, { e: '', n: 'Sem chapéu', c: 0 }, { e: '🎩', n: 'Cartola', c: 200 },
+  { e: '👒', n: 'Chapéu de Sol', c: 300 }, { e: '🎓', n: 'Formatura', c: 400 }, { e: '🎀', n: 'Laço', c: 250 },
+  { e: '🤠', n: 'Cowboy', g: 10 }, { e: '👑', n: 'Coroa', g: 25 },
+];
+const COLORS = [
+  { c: '#2f6fed', n: 'Azul', cost: 0 }, { c: '#e03131', n: 'Vermelho', cost: 100 }, { c: '#2b8a3e', n: 'Verde', cost: 100 },
+  { c: '#d6336c', n: 'Rosa', cost: 150 }, { c: '#212529', n: 'Preto', cost: 200 }, { c: '#f59f00', n: 'Dourado', g: 20 },
+];
+const GEM_SHOP = [
+  { e: '⚡', n: 'Boost 2x moedas', d: '3 minutos de moedas em dobro', g: 5, act: () => { S.boostT += 180; } },
+  { e: '💰', n: 'Saco de moedas', d: '+300 moedas', g: 8, act: () => { S.coins += 300; } },
+  { e: '🌟', n: 'Fama instantânea', d: '+1 estrela de reputação', g: 6, act: () => { S.rep = clamp(S.rep + 1, 1, 5); } },
+];
+const PACKS = [
+  { g: 20, p: 'R$ 4,90', e: '💎' }, { g: 60, p: 'R$ 12,90', e: '💎💎', tag: 'Popular' },
+  { g: 150, p: 'R$ 29,90', e: '💎💎💎', tag: 'Melhor valor' },
+];
+
+// ================== STATE ==================
+const DEFAULT = {
+  coins: 60, gems: 5, xp: 0, level: 1, rep: 3, served: 0, boostT: 0,
+  up: { speed: 0, cap: 0, tips: 0, decor: 0, price: 0, cleaners: 0, clean: 0 },
+  hats: ['🧢', ''], colors: ['#2f6fed'], hat: '🧢', color: '#2f6fed', seenHelp: false,
+};
+let S = load();
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem('hotelMariah_v1'));
+    if (d) return { ...DEFAULT, ...d, up: { ...DEFAULT.up, ...d.up } };
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(DEFAULT));
+}
+function save() { try { localStorage.setItem('hotelMariah_v1', JSON.stringify(S)); } catch (e) {} }
+
+const rooms = [];
+for (let i = 0; i < 10; i++) {
+  const row = i < 5 ? 0 : 1, col = i % 5, w = 184, x = 180 + col * w, y = row ? 280 : 10, h = row ? 180 : 190;
+  const r = { i, row, x, y, w, h, dx: x + w / 2, cy: y + h / 2, num: 101 + i, price: 30 + i * 6, state: 'clean', guest: null, cleaner: null, progress: 0 };
+  if (!row) { r.bedR = { x: x + 18, y: y + 20, w: 58, h: 82 }; r.bathR = { x: x + w - 76, y: y + 6, w: 70, h: 72 }; }
+  else { r.bedR = { x: x + 18, y: y + h - 102, w: 58, h: 82 }; r.bathR = { x: x + w - 76, y: y + h - 78, w: 70, h: 72 }; }
+  r.bed = { x: r.bedR.x + 29, y: r.bedR.y + 44 };
+  r.bath = { x: r.bathR.x + 35, y: r.bathR.y + 36 };
+  r.center = { x: r.dx, y: row ? r.cy - 10 : r.cy + 10 };
+  rooms.push(r);
+}
+const isUnlocked = r => S.level >= ROOM_UNLOCK[r.i];
+
+let guests = [], cleaners = [], floats = [], marker = null;
+const player = { x: 275, y: 507, path: [], cb: null, spd: 170, carry: [], dir: 1, moving: false };
+let spawnT = 2, qCounter = 0, paused = false, saveT = 0;
+
+// ================== ROUTING ==================
+function zoneOf(p) {
+  if (p.y >= 470) return { t: 'bottom' };
+  if (p.x < 180) return { t: 'hall' };
+  if (p.y >= 200 && p.y < 280) return { t: 'corr' };
+  const col = clamp(Math.floor((p.x - 180) / 184), 0, 4);
+  return { t: 'room', i: (p.y < 200 ? 0 : 5) + col };
+}
+function hubPath(p) {
+  const z = zoneOf(p);
+  if (z.t === 'room') { const r = rooms[z.i]; return [{ x: r.dx, y: r.cy }, { x: r.dx, y: 240 }, C0]; }
+  if (z.t === 'corr') return [{ x: p.x, y: 240 }, C0];
+  if (z.t === 'hall') return [{ x: 90, y: p.y }, C0];
+  return [B0, C0];
+}
+function route(a, b) {
+  const za = zoneOf(a), zb = zoneOf(b);
+  if (za.t === 'bottom' && zb.t === 'bottom') return [b];
+  if (za.t === 'hall' && zb.t === 'hall') return [b];
+  if (za.t === 'room' && zb.t === 'room' && za.i === zb.i) return [b];
+  const isC = z => z.t === 'room' || z.t === 'corr';
+  if (isC(za) && isC(zb)) return [...hubPath(a).slice(0, -1), ...hubPath(b).slice(0, -1).reverse(), b];
+  return [...hubPath(a), ...hubPath(b).reverse().slice(1), b];
+}
+function goTo(e, t, cb) { e.path = route({ x: e.x, y: e.y }, { x: t.x, y: t.y }); e.cb = cb || null; }
+function move(e, dt) {
+  let d = e.spd * dt; e.moving = false;
+  while (d > 0 && e.path.length) {
+    const p = e.path[0], dx = p.x - e.x, dy = p.y - e.y, dist = Math.hypot(dx, dy);
+    if (dist <= d) { e.x = p.x; e.y = p.y; e.path.shift(); d -= dist; }
+    else { e.x += dx / dist * d; e.y += dy / dist * d; if (Math.abs(dx) > 1) e.dir = dx < 0 ? -1 : 1; d = 0; e.moving = true; }
+  }
+  if (!e.path.length && e.cb) { const f = e.cb; e.cb = null; f(); }
+}
+
+// ================== HELPERS ==================
+let toastT;
+function toast(m) { const t = $('toast'); t.textContent = m; t.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(() => t.style.opacity = 0, 2400); }
+function float(x, y, text, color = '#fff') { floats.push({ x, y, text, color, t: 1.6 }); }
+const need = L => 50 + L * 35;
+const boostMul = () => S.boostT > 0 ? 2 : 1;
+function earn(n, x, y) { n = Math.round(n * boostMul()); S.coins += n; float(x, y - 30, `+${n} 🪙`, '#ffd43b'); }
+function addXP(n) {
+  S.xp += n;
+  const msgs = [];
+  while (S.xp >= need(S.level)) {
+    S.xp -= need(S.level); S.level++; S.gems += 3;
+    rooms.forEach(r => { if (ROOM_UNLOCK[r.i] === S.level) msgs.push(`🔓 Quarto ${r.num} desbloqueado!`); });
+    Object.values(ITEMS).forEach(it => { if (it.lvl === S.level) msgs.push(`🔓 ${it.st} liberada: ${it.e} ${it.n}`); });
+    msgs.push('💎 +3 gemas de presente');
+  }
+  if (msgs.length) levelUp(msgs);
+}
+function queueList() { return guests.filter(g => g.inQueue).sort((a, b) => a.qOrder - b.qOrder); }
+
+// ================== GUESTS ==================
+const SKINS = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac'];
+const GCOLORS = ['#ff922b', '#20c997', '#845ef7', '#f06595', '#fab005', '#15aabf', '#94d82d', '#ff6b6b'];
+function spawnGuest() {
+  guests.push({
+    x: EXIT.x, y: EXIT.y + 10, path: [], cb: null, spd: 75, dir: 1, color: pick(GCOLORS), skin: pick(SKINS),
+    hair: pick(['#2b1d0e', '#6b3e1e', '#e8c07d', '#111', '#b0413e', '#ddd']),
+    state: 'queue', inQueue: true, qOrder: qCounter++, slot: -1,
+    pat: 45 * (1 + 0.15 * S.up.decor), patMax: 45 * (1 + 0.15 * S.up.decor),
+    room: null, acts: 3 + Math.floor(Math.random() * 3), req: null, reqs: 0, sat: 1, act: null, timer: 0, spot: null, bag: true,
+  });
+}
+function doCheckin() {
+  const q = queueList();
+  if (!q.length) { toast('Nenhum hóspede esperando na recepção.'); return; }
+  const r = rooms.find(r => isUnlocked(r) && r.state === 'clean' && !r.guest);
+  if (!r) { toast('😬 Nenhum quarto limpo! Espere a equipe de limpeza 🧹'); return; }
+  const g = q[0];
+  g.inQueue = false; g.room = r; g.price = r.price * (1 + 0.15 * S.up.price); r.guest = g; r.state = 'occupied';
+  g.state = 'walk'; g.sat = 0.8 + 0.4 * (g.pat / g.patMax);
+  addXP(5); float(g.x, g.y - 40, `🔑 Quarto ${r.num}`, '#8ce99a');
+  goTo(g, r.center, () => { g.bag = false; nextActivity(g); });
+}
+function startAct(g, a, t) { g.state = 'act'; g.act = a; g.timer = t; }
+function nextActivity(g) {
+  if (g.spot) { g.spot.taken = false; g.spot = null; }
+  const r = g.room;
+  g.act = null; g.state = 'walk';
+  if (g.acts <= 0) {
+    r.state = 'dirty'; r.guest = null; g.room = null; g.bag = true;
+    goTo(g, r.center, () => goTo(g, CHECKOUT_PT, () => {
+      const pay = g.price * (0.5 + 0.5 * clamp(g.sat, 0, 1.5));
+      earn(pay, g.x, g.y); addXP(15);
+      S.rep = clamp(S.rep + (g.sat - 0.9) * 0.2, 1, 5);
+      float(g.x, g.y - 55, g.sat >= 1 ? '😍 Voltarei!' : g.sat >= 0.7 ? '🙂 Tchau!' : '😒 Hmpf', '#fff');
+      g.state = 'leave'; goTo(g, EXIT, () => { g.dead = true; });
+    }));
+    return;
+  }
+  g.acts--;
+  const a = pick(['sleep', 'sleep', 'bath', 'pool', 'food', 'room']);
+  if (a === 'sleep') goTo(g, r.bed, () => startAct(g, 'sleep', rand(8, 12)));
+  else if (a === 'bath') goTo(g, r.bath, () => startAct(g, 'bath', rand(4, 6)));
+  else if (a === 'room') goTo(g, r.center, () => startAct(g, 'room', rand(6, 9)));
+  else {
+    const free = (a === 'pool' ? POOL_SPOTS : FOOD_SPOTS).filter(s => !s.taken);
+    if (!free.length) { goTo(g, r.center, () => startAct(g, 'room', 6)); return; }
+    const s = pick(free); s.taken = true; g.spot = s;
+    goTo(g, s, () => startAct(g, a, rand(9, 13)));
+  }
+}
+function updateGuest(g, dt) {
+  move(g, dt);
+  if (g.state === 'queue') {
+    g.pat -= dt;
+    if (g.pat <= 0) {
+      g.inQueue = false; g.state = 'leave'; S.rep = clamp(S.rep - 0.15, 1, 5);
+      float(g.x, g.y - 40, '😡 Demorou demais!', '#ff8787');
+      goTo(g, EXIT, () => { g.dead = true; });
+    }
+  } else if (g.state === 'act' && !g.path.length) {
+    if (g.req) {
+      g.req.t -= dt;
+      if (g.req.t <= 0) {
+        g.req = null; g.sat -= 0.3; S.rep = clamp(S.rep - 0.08, 1, 5);
+        float(g.x, g.y - 40, '😠 Ninguém me atendeu!', '#ff8787');
+      }
+    } else {
+      g.timer -= dt;
+      if (g.reqs < 2 && Math.random() < dt * 0.085) {
+        const types = REQ_BY[g.act].filter(t => S.level >= ITEMS[t].lvl);
+        if (types.length) { const max = 28 * (1 + 0.15 * S.up.decor); g.req = { type: pick(types), t: max, max }; g.reqs++; }
+      }
+      if (g.timer <= 0) nextActivity(g);
+    }
+  }
+}
+function deliver(g) {
+  if (!g.req) { toast('Esse hóspede não precisa de nada agora.'); return; }
+  const idx = player.carry.indexOf(g.req.type);
+  const it = ITEMS[g.req.type];
+  if (idx < 0) { toast(`O hóspede quer ${it.e} ${it.n}. Pegue na ${it.st}!`); return; }
+  player.carry.splice(idx, 1);
+  const frac = g.req.t / g.req.max;
+  const tip = (6 + frac * 10) * (1 + 0.2 * S.up.tips) * (0.6 + S.rep * 0.15);
+  earn(tip, g.x, g.y); addXP(12); S.served++;
+  g.sat = Math.min(1.5, g.sat + 0.2); S.rep = clamp(S.rep + 0.03, 1, 5);
+  float(g.x, g.y - 55, pick(['😊 Obrigado!', '🥰 Perfeito!', '👍 Valeu!', '😄 Que rápido!']), '#8ce99a');
+  g.req = null;
+}
+
+// ================== CLEANERS ==================
+function syncCleaners() {
+  while (cleaners.length < 1 + S.up.cleaners) {
+    const i = cleaners.length;
+    cleaners.push({ i, home: { x: 395 + i * 38, y: 685 }, x: 395 + i * 38, y: 685, path: [], cb: null, spd: 90, dir: 1, state: 'idle', room: null, timer: 0 });
+  }
+}
+function updateCleaner(c, dt) {
+  c.spd = 90 * (1 + 0.12 * S.up.clean);
+  move(c, dt);
+  if (c.state === 'idle') {
+    const r = rooms.find(r => r.state === 'dirty' && !r.cleaner);
+    if (r) {
+      r.cleaner = c; c.room = r; c.state = 'walk';
+      goTo(c, r.bed, () => { c.state = 'cleaning'; c.timer = c.tMax = 10 / (1 + 0.3 * S.up.clean); r.state = 'cleaning'; });
+    }
+  } else if (c.state === 'cleaning') {
+    const r = c.room;
+    c.timer -= dt; r.progress = 1 - c.timer / c.tMax;
+    const phase = Math.floor(r.progress * 3);
+    const target = phase === 0 ? r.bed : phase === 1 ? r.bath : r.center;
+    if (!c.path.length && Math.hypot(c.x - target.x, c.y - target.y) > 2) goTo(c, target);
+    if (c.timer <= 0) {
+      r.state = 'clean'; r.cleaner = null; r.progress = 0; c.room = null; c.state = 'walk';
+      float(r.dx, r.cy, '✨ Limpinho!', '#a5d8ff');
+      goTo(c, c.home, () => { c.state = 'idle'; });
+    }
+  }
+}
+
+// ================== UPDATE ==================
+function update(dt) {
+  if (S.boostT > 0) S.boostT = Math.max(0, S.boostT - dt);
+  syncCleaners();
+  spawnT -= dt;
+  if (spawnT <= 0) {
+    spawnT = rand(7, 12) * (1.35 - S.rep * 0.09);
+    const unlocked = rooms.filter(isUnlocked).length;
+    const active = guests.filter(g => g.state !== 'leave').length;
+    if (queueList().length < 5 && active < unlocked + 2) spawnGuest();
+  }
+  queueList().forEach((g, i) => { if (g.slot !== i) { g.slot = i; goTo(g, QSLOTS[i]); } });
+  guests.forEach(g => updateGuest(g, dt));
+  guests = guests.filter(g => !g.dead);
+  cleaners.forEach(c => updateCleaner(c, dt));
+  player.spd = 170 * (1 + 0.15 * S.up.speed);
+  move(player, dt);
+  floats.forEach(f => { f.t -= dt; f.y -= 22 * dt; });
+  floats = floats.filter(f => f.t > 0);
+  if (marker) { marker.t -= dt; if (marker.t <= 0) marker = null; }
+  saveT += dt; if (saveT > 3) { saveT = 0; save(); }
+}
+
+// ================== INPUT ==================
+let scale = 1;
+function resize() {
+  const wrap = $('wrap');
+  scale = Math.min(wrap.clientWidth / W, wrap.clientHeight / H);
+  const dpr = window.devicePixelRatio || 1;
+  cv.style.width = W * scale + 'px'; cv.style.height = H * scale + 'px';
+  cv.width = Math.round(W * scale * dpr); cv.height = Math.round(H * scale * dpr);
+  ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+}
+window.addEventListener('resize', resize);
+const inR = (p, r, pad = 0) => p.x >= r.x - pad && p.x <= r.x + r.w + pad && p.y >= r.y - pad && p.y <= r.y + r.h + pad;
+
+cv.addEventListener('pointerdown', e => {
+  if (paused) return;
+  const b = cv.getBoundingClientRect();
+  const p = { x: (e.clientX - b.left) / scale, y: (e.clientY - b.top) / scale };
+  // guests
+  let best = null, bd = 24;
+  guests.forEach(g => { const d = Math.hypot(g.x - p.x, g.y - 10 - p.y); if (d < bd) { bd = d; best = g; } });
+  if (best) {
+    const g = best;
+    if (g.inQueue) { marker = { ...STAFF_SPOT, t: 0.6 }; goTo(player, STAFF_SPOT, doCheckin); return; }
+    if (g.req) {
+      if (!player.carry.includes(g.req.type)) { const it = ITEMS[g.req.type]; toast(`O hóspede quer ${it.e} ${it.n}. Pegue na ${it.st}!`); return; }
+      marker = { x: g.x, y: g.y, t: 0.6 }; goTo(player, g, () => deliver(g)); return;
+    }
+    if (g.act) toast(`Esse hóspede está ${ACT_TXT[g.act]} ${ACT_ICON[g.act]}`);
+    else if (g.state === 'leave' || g.bag) toast('🧳 Hóspede de passagem.');
+    return;
+  }
+  // stations
+  for (const s of STATIONS) {
+    if (inR(p, s, 6)) {
+      const it = ITEMS[s.item];
+      if (S.level < it.lvl) { toast(`🔒 ${s.name} libera no nível ${it.lvl}`); return; }
+      marker = { x: s.px, y: s.py, t: 0.6 };
+      goTo(player, { x: s.px, y: s.py }, () => {
+        if (player.carry.length >= 1 + S.up.cap) { toast('🙌 Mãos cheias! Entregue algo ou compre a Bandeja Extra.'); return; }
+        player.carry.push(s.item); float(player.x, player.y - 40, `${it.e} pegou!`, '#fff');
+      });
+      return;
+    }
+  }
+  if (inR(p, DESK, 10)) { marker = { ...STAFF_SPOT, t: 0.6 }; goTo(player, STAFF_SPOT, doCheckin); return; }
+  if (inR(p, STAFF_ROOM)) { toast('🧹 Sala da equipe de limpeza. Só eles limpam os quartos!'); return; }
+  const z = zoneOf(p);
+  if (z.t === 'room') {
+    const r = rooms[z.i];
+    if (!isUnlocked(r)) { toast(`🔒 Quarto ${r.num} desbloqueia no nível ${ROOM_UNLOCK[r.i]}`); return; }
+    if (r.state === 'dirty' || r.state === 'cleaning') toast('🧹 Só a equipe de limpeza pode limpar. Você cuida dos hóspedes!');
+  }
+  const t = { x: clamp(p.x, 20, W - 20), y: clamp(p.y, 22, H - 12) };
+  marker = { ...t, t: 0.6 };
+  goTo(player, t);
+});
+window.addEventListener('keydown', e => { if (e.code === 'Space') togglePause(); });
+
+// ================== DRAW ==================
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function emo(e, x, y, s) { ctx.font = `${s}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(e, x, y); }
+function txt(t, x, y, s, c, bold = true, align = 'center') { ctx.font = `${bold ? 'bold ' : ''}${s}px "Trebuchet MS",sans-serif`; ctx.fillStyle = c; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillText(t, x, y); }
+function bar(x, y, w, frac, col) { ctx.fillStyle = '#0006'; rr(x - w / 2, y, w, 5, 2); ctx.fill(); ctx.fillStyle = col || (frac > 0.5 ? '#51cf66' : frac > 0.25 ? '#fcc419' : '#ff6b6b'); rr(x - w / 2, y, w * clamp(frac, 0, 1), 5, 2); ctx.fill(); }
+
+function drawFloor() {
+  ctx.fillStyle = '#4a3b31'; ctx.fillRect(0, 0, W, H);
+  // hall
+  ctx.fillStyle = '#e8dcc4'; ctx.fillRect(8, 8, 172, 470);
+  ctx.fillStyle = '#b23a48'; ctx.fillRect(66, 20, 48, 450);
+  // corridor
+  ctx.fillStyle = '#b23a48'; ctx.fillRect(176, 204, 916, 72);
+  ctx.strokeStyle = '#e9c46a'; ctx.lineWidth = 2; ctx.strokeRect(182, 210, 904, 60);
+  ctx.fillStyle = '#b23a48'; ctx.fillRect(66, 204, 120, 72);
+  // lobby
+  for (let x = 8; x < 1092; x += 36) for (let y = 478; y < 714; y += 36) {
+    ctx.fillStyle = ((x + y) / 36) % 2 < 1 ? '#f3ead8' : '#e9dcc3';
+    ctx.fillRect(x, y, Math.min(36, 1092 - x), Math.min(36, 714 - y));
+  }
+  ctx.fillStyle = '#e8dcc4'; ctx.fillRect(20, 462, 140, 20);
+  // entrance
+  ctx.fillStyle = '#8d6e63'; ctx.fillRect(55, 704, 70, 16);
+  txt('ENTRADA', 90, 712, 11, '#fff');
+  // hall decor
+  emo('🛗', 40, 40, 26); emo('🪴', 150, 40, 24); emo('🪴', 30, 440, 22); emo('🖼️', 150, 140, 20); emo('🪴', 150, 440, 22);
+  txt('CORREDOR', 90, 330, 11, '#6b4f3f');
+}
+function drawRoom(r, t) {
+  const { x, y, w, h } = r;
+  ctx.fillStyle = r.state === 'dirty' || r.state === 'cleaning' ? '#c9b99a' : ['#f7e1d7', '#dde5b6', '#cfe1f2', '#f2d7ee', '#e3f2d0'][r.i % 5];
+  ctx.fillRect(x + 4, y + 4, w - 8, h - 8);
+  // door gap
+  if (!r.row) ctx.fillRect(r.dx - 22, y + h - 6, 44, 12); else ctx.fillRect(r.dx - 22, y - 6, 44, 12);
+  // rug
+  ctx.fillStyle = '#0000000f'; rr(r.center.x - 30, r.center.y - 18, 60, 36, 10); ctx.fill();
+  // bathroom
+  const b = r.bathR;
+  ctx.fillStyle = '#e3fafc'; ctx.fillRect(b.x, b.y, b.w, b.h);
+  ctx.strokeStyle = '#99e9f2'; ctx.lineWidth = 1;
+  for (let i = 12; i < b.w; i += 12) { ctx.beginPath(); ctx.moveTo(b.x + i, b.y); ctx.lineTo(b.x + i, b.y + b.h); ctx.stroke(); }
+  for (let i = 12; i < b.h; i += 12) { ctx.beginPath(); ctx.moveTo(b.x, b.y + i); ctx.lineTo(b.x + b.w, b.y + i); ctx.stroke(); }
+  ctx.strokeStyle = '#6b4f3f'; ctx.lineWidth = 3; ctx.strokeRect(b.x, b.y, b.w, b.h);
+  emo('🚽', b.x + 16, r.row ? b.y + b.h - 16 : b.y + 16, 18); emo('🛁', b.x + b.w - 18, r.row ? b.y + b.h - 18 : b.y + 18, 18);
+  // bed
+  const bd = r.bedR, dirty = r.state === 'dirty' || r.state === 'cleaning';
+  ctx.fillStyle = '#8d5524'; rr(bd.x - 3, bd.y - 3, bd.w + 6, bd.h + 6, 6); ctx.fill();
+  ctx.fillStyle = '#fff'; rr(bd.x, bd.y, bd.w, bd.h, 5); ctx.fill();
+  const py = r.row ? bd.y + bd.h - 20 : bd.y + 6;
+  ctx.fillStyle = '#e7f5ff'; rr(bd.x + 6, py, bd.w - 12, 14, 5); ctx.fill();
+  if (dirty) {
+    ctx.save(); ctx.translate(bd.x + bd.w / 2, bd.y + bd.h / 2); ctx.rotate(0.35);
+    ctx.fillStyle = '#74c0fc'; rr(-26, -18, 52, 40, 6); ctx.fill(); ctx.restore();
+    ctx.fillStyle = '#8d6e6388'; ctx.beginPath(); ctx.ellipse(r.center.x + 20, r.center.y + 5, 14, 8, 0, 0, 7); ctx.fill();
+    emo('🗑️', r.center.x - 20, r.center.y, 16); emo('🧦', r.center.x + 35, r.center.y - 18, 14); emo('🍕', bd.x + bd.w + 18, bd.y + 20, 14);
+    emo('🪰', r.center.x + 10 + Math.sin(t * 5 + r.i) * 8, r.center.y - 20 + Math.cos(t * 7) * 5, 10);
+  } else {
+    ctx.fillStyle = '#4dabf7'; rr(bd.x, r.row ? bd.y : bd.y + 26, bd.w, bd.h - 26, 5); ctx.fill();
+  }
+  emo('📺', x + w / 2 + 10, r.row ? y + 20 : y + 18, 16);
+  emo('🪴', x + w - 16, r.row ? y + 18 : y + h - 20, 16);
+  // plate
+  const plY = r.row ? y + 18 : y + h - 18;
+  const col = { clean: '#51cf66', occupied: '#4dabf7', dirty: '#a0522d', cleaning: '#fcc419' }[r.state];
+  ctx.fillStyle = '#3b2b20'; rr(r.dx - 28, plY - 10, 56, 20, 6); ctx.fill();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(r.dx - 17, plY, 5, 0, 7); ctx.fill();
+  txt(String(r.num), r.dx + 6, plY + 1, 12, '#f4c95d');
+  if (r.state === 'cleaning') bar(r.dx, plY + (r.row ? 14 : -18), 56, r.progress, '#fcc419');
+  if (!isUnlocked(r)) {
+    ctx.fillStyle = '#000000a8'; ctx.fillRect(x + 4, y + 4, w - 8, h - 8);
+    emo('🔒', r.dx, r.cy - 10, 30); txt(`Nível ${ROOM_UNLOCK[r.i]}`, r.dx, r.cy + 22, 14, '#fff');
+  }
+}
+function drawLobby(t) {
+  // reception
+  ctx.fillStyle = '#6d4c41'; rr(DESK.x, DESK.y, DESK.w, DESK.h, 8); ctx.fill();
+  ctx.fillStyle = '#a1887f'; rr(DESK.x + 4, DESK.y + 4, DESK.w - 8, 10, 4); ctx.fill();
+  emo('🛎️', DESK.x + 20, DESK.y + 16, 18); emo('💻', DESK.x + DESK.w - 22, DESK.y + 14, 16);
+  txt('RECEPÇÃO', DESK.x + DESK.w / 2, DESK.y + 23, 11, '#fff');
+  if (queueList().length) { const bob = Math.sin(t * 6) * 3; emo('❗', DESK.x + DESK.w / 2, DESK.y - 40 + bob, 20); }
+  // stations
+  STATIONS.forEach(s => {
+    const it = ITEMS[s.item], locked = S.level < it.lvl;
+    const wanted = guests.some(g => g.req && g.req.type === s.item);
+    ctx.fillStyle = s.color; rr(s.x, s.y, s.w, s.h, 10); ctx.fill();
+    ctx.strokeStyle = wanted && !locked ? '#ffd43b' : '#0003'; ctx.lineWidth = wanted && !locked ? 3 : 2; ctx.stroke();
+    emo(it.e, s.px, s.y + 18, 22); txt(s.name, s.px, s.y + 38, 10, '#333');
+    if (locked) { ctx.fillStyle = '#000a'; rr(s.x, s.y, s.w, s.h, 10); ctx.fill(); emo('🔒', s.px, s.y + 16, 16); txt(`Nível ${it.lvl}`, s.px, s.y + 36, 11, '#fff'); }
+  });
+  // staff room
+  const sr = STAFF_ROOM;
+  ctx.fillStyle = '#e5dbff'; rr(sr.x, sr.y, sr.w, sr.h, 10); ctx.fill(); ctx.strokeStyle = '#845ef7'; ctx.lineWidth = 2; ctx.stroke();
+  txt(`🧹 EQUIPE DE LIMPEZA (${cleaners.length})`, sr.x + sr.w / 2, sr.y + 14, 11, '#5f3dc4');
+  // restaurant
+  const rs = RESTAURANT;
+  ctx.fillStyle = '#fff4e6'; rr(rs.x, rs.y, rs.w, rs.h, 10); ctx.fill(); ctx.strokeStyle = '#ffa94d'; ctx.stroke();
+  txt('🍽️ RESTAURANTE', rs.x + rs.w / 2, rs.y + 12, 11, '#d9480f');
+  TABLES.forEach(([x, y]) => { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 14, 0, 7); ctx.fill(); ctx.strokeStyle = '#e8590c'; ctx.stroke(); emo('🌷', x, y, 12); });
+  // pool
+  const p = POOL;
+  ctx.fillStyle = '#dee2e6'; rr(p.x - 6, p.y - 6, p.w + 12, p.h + 12, 16); ctx.fill();
+  const grad = ctx.createLinearGradient(p.x, p.y, p.x + p.w, p.y + p.h); grad.addColorStop(0, '#4dabf7'); grad.addColorStop(1, '#1c7ed6');
+  ctx.fillStyle = grad; rr(p.x, p.y, p.w, p.h, 12); ctx.fill();
+  ctx.strokeStyle = '#ffffff66'; ctx.lineWidth = 2;
+  for (let i = 0; i < 4; i++) { ctx.beginPath(); for (let x = p.x + 10; x < p.x + p.w - 10; x += 6) { const yy = p.y + 25 + i * 32 + Math.sin(x / 15 + t * 2 + i) * 3; x === p.x + 10 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy); } ctx.stroke(); }
+  txt('PISCINA', p.x + p.w / 2, p.y + p.h - 12, 12, '#fff');
+  POOL_SPOTS.slice(4).forEach(s => { ctx.fillStyle = '#ffec99'; rr(s.x - 12, s.y - 4, 24, 36, 5); ctx.fill(); });
+  emo('⛱️', 1070, 655, 22); emo('🌴', 830, 700, 24); emo('🪴', 20, 490, 20); emo('🪴', 365, 492, 18);
+}
+function drawPerson(e, body, skin, hair, hat, lying) {
+  const bob = e.moving ? Math.abs(Math.sin(performance.now() / 110)) * 3 : 0;
+  const x = e.x, y = e.y - bob;
+  ctx.fillStyle = '#0003'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 10, 12, 5, 0, 0, 7); ctx.fill();
+  if (lying) {
+    ctx.fillStyle = body; rr(x - 14, y - 6, 28, 22, 8); ctx.fill();
+    ctx.fillStyle = skin; ctx.beginPath(); ctx.arc(x, y - 12, 9, 0, 7); ctx.fill();
+    return;
+  }
+  ctx.fillStyle = body; rr(x - 11, y - 8, 22, 20, 8); ctx.fill();
+  ctx.fillStyle = skin; ctx.beginPath(); ctx.arc(x, y - 16, 9, 0, 7); ctx.fill();
+  ctx.fillStyle = hair; ctx.beginPath(); ctx.arc(x, y - 19, 9, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(x - 3 + e.dir, y - 15, 1.4, 0, 7); ctx.arc(x + 3 + e.dir, y - 15, 1.4, 0, 7); ctx.fill();
+  if (hat) emo(hat, x, y - 28, 18);
+}
+function bubble(x, y, e, frac, glow) {
+  ctx.fillStyle = glow ? '#d3f9d8' : '#fff'; rr(x - 19, y - 62, 38, 34, 10); ctx.fill();
+  ctx.strokeStyle = glow ? '#2f9e44' : '#0004'; ctx.lineWidth = glow ? 3 : 1.5; ctx.stroke();
+  ctx.fillStyle = glow ? '#d3f9d8' : '#fff'; ctx.beginPath(); ctx.moveTo(x - 5, y - 29); ctx.lineTo(x + 5, y - 29); ctx.lineTo(x, y - 22); ctx.fill();
+  emo(e, x, y - 49, 18); bar(x, y - 38, 28, frac);
+}
+function drawEntities(t) {
+  const list = [...guests.map(g => ['g', g]), ...cleaners.map(c => ['c', c]), ['p', player]].sort((a, b) => a[1].y - b[1].y);
+  list.forEach(([k, e]) => {
+    if (k === 'g') {
+      drawPerson(e, e.color, e.skin, e.hair, '', e.act === 'sleep' && !e.req);
+      if (e.bag) emo('🧳', e.x + 16, e.y + 4, 14);
+      if (e.act && !e.req) emo(ACT_ICON[e.act], e.x + 14, e.y - 30 + Math.sin(t * 3) * 2, 14);
+    } else if (k === 'c') {
+      drawPerson(e, '#7048e8', '#f1c27d', '#3b2b20', '');
+      ctx.fillStyle = '#fff'; ctx.fillRect(e.x - 6, e.y - 4, 12, 4);
+      const sw = e.state === 'cleaning' ? Math.sin(t * 12) * 6 : 0;
+      emo('🧹', e.x + 14 + sw, e.y, 16);
+      if (e.state === 'cleaning') emo('✨', e.x - 14, e.y - 26 + Math.sin(t * 8) * 4, 12);
+    } else {
+      drawPerson(e, S.color, '#ffdbac', '#5c3a1e', S.hat);
+      ctx.fillStyle = '#f4c95d'; ctx.beginPath(); ctx.arc(e.x, e.y - 3, 1.8, 0, 7); ctx.arc(e.x, e.y + 3, 1.8, 0, 7); ctx.fill();
+      txt('VOCÊ', e.x, e.y + 22, 10, '#fff');
+      e.carry.forEach((it, i) => emo(ITEMS[it].e, e.x - (e.carry.length - 1) * 9 + i * 18, e.y - (S.hat ? 46 : 36), 16));
+    }
+  });
+  // bubbles on top
+  guests.forEach(g => {
+    if (g.inQueue) bubble(g.x, g.y, '🛎️', g.pat / g.patMax, false);
+    else if (g.req) bubble(g.x, g.y, ITEMS[g.req.type].e, g.req.t / g.req.max, player.carry.includes(g.req.type));
+  });
+}
+function draw(t) {
+  ctx.clearRect(0, 0, W, H);
+  drawFloor();
+  rooms.forEach(r => drawRoom(r, t));
+  drawLobby(t);
+  if (marker) { ctx.strokeStyle = `rgba(255,212,59,${marker.t / 0.6})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(marker.x, marker.y + 10, 16 * (1.4 - marker.t), 7 * (1.4 - marker.t), 0, 0, 7); ctx.stroke(); }
+  drawEntities(t);
+  floats.forEach(f => { ctx.globalAlpha = clamp(f.t, 0, 1); ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.font = 'bold 15px "Trebuchet MS",sans-serif'; ctx.textAlign = 'center'; ctx.strokeText(f.text, f.x, f.y); txt(f.text, f.x, f.y, 15, f.color); ctx.globalAlpha = 1; });
+  if (paused && $('modal').classList.contains('hidden')) { ctx.fillStyle = '#0008'; ctx.fillRect(0, 0, W, H); txt('⏸️ PAUSADO', W / 2, H / 2, 48, '#fff'); }
+}
+
+// ================== HUD ==================
+function hud() {
+  $('coins').textContent = Math.floor(S.coins);
+  $('gems').textContent = S.gems;
+  $('lvl').textContent = S.level;
+  $('xp').style.width = (S.xp / need(S.level) * 100) + '%';
+  $('rep').textContent = S.rep.toFixed(1);
+  $('carry').textContent = player.carry.length ? player.carry.map(i => ITEMS[i].e).join(' ') + ` (${player.carry.length}/${1 + S.up.cap})` : 'mãos livres';
+  $('boost').style.display = S.boostT > 0 ? '' : 'none';
+  $('boostT').textContent = Math.ceil(S.boostT) + 's';
+}
+$('drop').onclick = () => { player.carry = []; toast('Itens devolvidos.'); };
+$('shopBtn').onclick = () => openShop('up');
+$('addGems').onclick = () => openShop('iap');
+$('helpBtn').onclick = openHelp;
+$('pauseBtn').onclick = togglePause;
+function togglePause() { if (!$('modal').classList.contains('hidden')) return; paused = !paused; $('pauseBtn').textContent = paused ? '▶️' : '⏸️'; }
+
+// ================== MODALS ==================
+function openModal(html) { $('box').innerHTML = html; $('modal').classList.remove('hidden'); paused = true; }
+function closeModal() { $('modal').classList.add('hidden'); paused = false; $('pauseBtn').textContent = '⏸️'; save(); }
+$('modal').addEventListener('pointerdown', e => { if (e.target.id === 'modal') closeModal(); });
+
+let shopTab = 'up';
+function openShop(tab) { shopTab = tab || shopTab; renderShop(); }
+function renderShop() {
+  const tabs = [['up', '⚙️ Melhorias'], ['look', '👔 Personagem'], ['gem', '💎 Itens Especiais'], ['iap', '💳 Comprar Gemas']]
+    .map(([k, n]) => `<button class="${k === shopTab ? 'on' : ''}" data-tab="${k}">${n}</button>`).join('');
+  let body = '';
+  if (shopTab === 'up') {
+    body = '<div class="grid">' + UPGRADES.map(u => {
+      const l = S.up[u.k], maxed = l >= u.max, c = u.cost(l);
+      return `<div class="card"><div class="big">${u.e}</div><div class="n">${u.n}</div><div class="d">${u.d}</div>
+        <div class="lvlbar">${Array.from({ length: u.max }, (_, i) => `<i class="${i < l ? 'f' : ''}"></i>`).join('')}</div>
+        <button data-up="${u.k}" ${maxed || S.coins < c ? 'disabled' : ''}>${maxed ? 'MÁXIMO' : `🪙 ${c}`}</button></div>`;
+    }).join('') + '</div>';
+  } else if (shopTab === 'look') {
+    body = '<h3>Chapéus</h3><div class="grid">' + HATS.map((h, i) => {
+      const own = S.hats.includes(h.e), eq = S.hat === h.e;
+      const label = eq ? 'Usando' : own ? 'Usar' : h.g ? `💎 ${h.g}` : `🪙 ${h.c}`;
+      const can = own || (h.g ? S.gems >= h.g : S.coins >= h.c);
+      return `<div class="card ${eq ? 'eq' : ''}"><div class="big">${h.e || '🙂'}</div><div class="n">${h.n}</div>
+        <button data-hat="${i}" ${eq || !can ? 'disabled' : ''}>${label}</button></div>`;
+    }).join('') + '</div><h3>Cor do uniforme</h3><div class="grid">' + COLORS.map((c, i) => {
+      const own = S.colors.includes(c.c), eq = S.color === c.c;
+      const label = eq ? 'Usando' : own ? 'Usar' : c.g ? `💎 ${c.g}` : `🪙 ${c.cost}`;
+      const can = own || (c.g ? S.gems >= c.g : S.coins >= c.cost);
+      return `<div class="card ${eq ? 'eq' : ''}"><div class="swatch" style="background:${c.c}"></div><div class="n">${c.n}</div>
+        <button data-col="${i}" ${eq || !can ? 'disabled' : ''}>${label}</button></div>`;
+    }).join('') + '</div>';
+  } else if (shopTab === 'gem') {
+    body = '<div class="grid">' + GEM_SHOP.map((g, i) => `<div class="card"><div class="big">${g.e}</div><div class="n">${g.n}</div><div class="d">${g.d}</div>
+      <button data-gem="${i}" ${S.gems < g.g ? 'disabled' : ''}>💎 ${g.g}</button></div>`).join('') + '</div>';
+  } else {
+    body = `<div class="demo">🧪 <b>Modo demonstração:</b> esta loja simula compras dentro do app. Nenhum pagamento real é feito — as gemas são adicionadas de graça.</div>
+      <div class="grid">` + PACKS.map((p, i) => `<div class="card"><div class="big">${p.e}</div><div class="n">${p.g} gemas ${p.tag ? `⭐ ${p.tag}` : ''}</div>
+      <button data-pack="${i}">${p.p}</button></div>`).join('') + '</div>';
+  }
+  openModal(`<button class="close" id="cls">✕</button><h2>🛒 Loja do Hotel</h2>
+    <div style="margin-bottom:8px">🪙 <b>${Math.floor(S.coins)}</b> &nbsp; 💎 <b>${S.gems}</b></div><div class="tabs">${tabs}</div>${body}`);
+  $('cls').onclick = closeModal;
+  $('box').querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { shopTab = b.dataset.tab; renderShop(); });
+  $('box').querySelectorAll('[data-up]').forEach(b => b.onclick = () => {
+    const u = UPGRADES.find(u => u.k === b.dataset.up), c = u.cost(S.up[u.k]);
+    if (S.coins >= c && S.up[u.k] < u.max) { S.coins -= c; S.up[u.k]++; toast(`✅ ${u.n} nível ${S.up[u.k]}!`); renderShop(); }
+  });
+  $('box').querySelectorAll('[data-hat]').forEach(b => b.onclick = () => {
+    const h = HATS[b.dataset.hat];
+    if (!S.hats.includes(h.e)) { if (h.g) S.gems -= h.g; else S.coins -= h.c; S.hats.push(h.e); }
+    S.hat = h.e; renderShop();
+  });
+  $('box').querySelectorAll('[data-col]').forEach(b => b.onclick = () => {
+    const c = COLORS[b.dataset.col];
+    if (!S.colors.includes(c.c)) { if (c.g) S.gems -= c.g; else S.coins -= c.cost; S.colors.push(c.c); }
+    S.color = c.c; renderShop();
+  });
+  $('box').querySelectorAll('[data-gem]').forEach(b => b.onclick = () => {
+    const g = GEM_SHOP[b.dataset.gem]; if (S.gems < g.g) return;
+    S.gems -= g.g; g.act(); toast(`✅ ${g.n} ativado!`); renderShop();
+  });
+  $('box').querySelectorAll('[data-pack]').forEach(b => b.onclick = () => {
+    const p = PACKS[b.dataset.pack];
+    if (confirm(`Comprar ${p.g} gemas por ${p.p}?\n\n(Demonstração — nenhum valor real será cobrado.)`)) { S.gems += p.g; toast(`💎 +${p.g} gemas!`); renderShop(); }
+  });
+}
+function openHelp() {
+  openModal(`<button class="close" id="cls">✕</button><div class="help"><h2>🏨 Bem-vindo ao Hotel Mariah!</h2>
+    <p>Você é o <b>concierge</b> do hotel: seu trabalho é realizar as vontades dos hóspedes. 🛎️</p>
+    <ul>
+      <li>🖱️ <b>Clique</b> no chão para andar.</li>
+      <li>🛎️ Hóspedes chegam na <b>Recepção</b>. Clique no balcão para fazer o <b>check-in</b> e levar ele(a) ao quarto.</li>
+      <li>💭 Os hóspedes vão ao quarto, dormem 💤, usam o banheiro 🚿, curtem a piscina 🏊 e o restaurante 🍽️.</li>
+      <li>🧺🍔🍹☕ Quando aparecer um <b>balão</b>, pegue o item na estação certa e clique no hóspede para entregar. Rápido = mais gorjeta!</li>
+      <li>🧳 Ao ir embora, o hóspede paga a diária e deixa o quarto <b>sujo</b>. A <b>equipe de limpeza 🧹</b> cuida disso — você não limpa!</li>
+      <li>⭐ Suba de <b>nível</b> para desbloquear novos quartos e estações.</li>
+      <li>🛒 Na <b>Loja</b>, compre melhorias, contrate faxineiros e personalize seu personagem.</li>
+      <li>⌨️ Espaço = pausar.</li>
+    </ul>
+    <p style="opacity:.7">Atendidos: ${S.served} pedidos.</p>
+    <button class="btn" id="go">Bora trabalhar! 🚀</button> &nbsp; <button class="close" style="float:none" id="reset">Recomeçar do zero</button></div>`);
+  $('cls').onclick = $('go').onclick = () => { S.seenHelp = true; closeModal(); };
+  $('reset').onclick = () => { if (confirm('Apagar todo o progresso?')) { localStorage.removeItem('hotelMariah_v1'); location.reload(); } };
+}
+function levelUp(msgs) {
+  openModal(`<div style="text-align:center"><div style="font-size:60px">🎉</div><h2>Nível ${S.level}!</h2>
+    ${msgs.map(m => `<p style="font-size:17px">${m}</p>`).join('')}<button class="btn" id="ok">Continuar</button></div>`);
+  $('ok').onclick = closeModal;
+}
+
+// ================== START ==================
+resize();
+syncCleaners();
+let last = performance.now(), hudT = 0;
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!paused) update(dt);
+  draw(now / 1000);
+  hudT -= dt; if (hudT <= 0) { hudT = 0.15; hud(); }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+if (!S.seenHelp) openHelp();
+</script>
+</body>
+</html>
